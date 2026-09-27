@@ -50,6 +50,7 @@ import {
   keymapForOptions,
   macrosForOptions,
   marksForOptions,
+  searchForOptions,
   type VimConfigPlan,
 } from "../config.ts";
 import { protectedShortcutForKey } from "../customization.ts";
