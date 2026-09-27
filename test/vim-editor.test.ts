@@ -500,6 +500,20 @@ test("EasyMotion labels render without editing prompt text", () => {
   expect(editor.getCursor()).toEqual({ line: 0, col: 1 });
 });
 
+test("EasyMotion restores cursor to the correct logical line after wrapping", () => {
+  const options = easyMotionOptions();
+  const { editor } = createEditor(options, { warnings: [] }, false, { rows: 24, columns: 20 });
+  editor.setText("abcdefghijklmnopqrstuvwx\nz");
+  editor.render(10);
+
+  typeKeys(editor, ["e", "z"]);
+  expect(editor.render(10).join("\n")).toContain("\x1b[31ma\x1b[0m");
+
+  typeKeys(editor, ["a"]);
+
+  expect(editor.getCursor()).toEqual({ line: 1, col: 0 });
+});
+
 test("EasyMotion cancel, invalid labels, and misses preserve prompt text", () => {
   const options = easyMotionOptions();
   const { editor } = createEditor(options);
