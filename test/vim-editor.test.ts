@@ -250,6 +250,38 @@ test("entering visual mode keeps long-prompt viewport stable", () => {
   expectRenderedWidth(visualLines, 20);
 });
 
+test("visual k at the top does not browse prompt history", () => {
+  const { editor } = createEditor(
+    { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+    { warnings: [] },
+    false,
+    { rows: 20, columns: 20 },
+  );
+  editor.setText("one\ntwo");
+  editor.addToHistory("previous prompt");
+  typeKeys(editor, ["g", "g", "v", "k"]);
+
+  expect(editor.getText()).toBe("one\ntwo");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+});
+
+test("visual j at the bottom does not browse prompt history", () => {
+  const { editor } = createEditor(
+    { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
+    { warnings: [] },
+    false,
+    { rows: 20, columns: 20 },
+  );
+  editor.setText("one\ntwo");
+  editor.addToHistory("previous prompt");
+  typeKeys(editor, ["G"]);
+  (editor as any).historyIndex = 0;
+  typeKeys(editor, ["v", "j"]);
+
+  expect(editor.getText()).toBe("one\ntwo");
+  expect(editor.getCursor()).toEqual({ line: 1, col: 3 });
+});
+
 test("visual down movement inside viewport does not scroll long prompt", () => {
   const { editor } = createEditor(
     { ...DEFAULT_VIM_OPTIONS, startMode: "normal" },
