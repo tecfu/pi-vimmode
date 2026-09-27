@@ -734,10 +734,10 @@ export class VimEditor extends CustomEditor {
 
     if (current.line > target.line) {
       super.handleInput(KEY.lineStart);
-      for (let i = current.line; i > target.line; i--) super.handleInput(KEY.up);
+      while (this.getCursor().line > target.line) super.handleInput(KEY.up);
     } else if (current.line < target.line) {
       super.handleInput(KEY.lineStart);
-      for (let i = current.line; i < target.line; i++) super.handleInput(KEY.down);
+      while (this.getCursor().line < target.line) super.handleInput(KEY.down);
     }
 
     const lineLength = this.getLines()[target.line]?.length ?? 0;
