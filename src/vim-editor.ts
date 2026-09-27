@@ -429,12 +429,23 @@ export class VimEditor extends CustomEditor {
         maxHighlights: search.maxHighlights,
       };
     }
+    if (this.modalState.pendingSearch) {
+      return {
+        query: this.modalState.pendingSearch.query,
+        highlightCurrent: false,
+        maxHighlights: search.maxHighlights,
+        highlightColor: search.highlightColor,
+        currentHighlightColor: search.currentHighlightColor,
+      };
+    }
     if (!this.modalState.searchHighlight) return undefined;
     return {
       query: this.modalState.searchHighlight.query,
       current: this.modalState.searchHighlight.current,
       highlightCurrent: search.highlightCurrent,
       maxHighlights: search.maxHighlights,
+      highlightColor: search.highlightColor,
+      currentHighlightColor: search.currentHighlightColor,
     };
   }
   private easymotionRenderInput() {

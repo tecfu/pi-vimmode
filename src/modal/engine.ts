@@ -814,6 +814,13 @@ function handleNormalInput(
   }
 
   const keymap = keymapForOptions(options);
+  const searchOptions = searchForOptions(options);
+  if (!state.pending && !state.pendingRegister && state.lastSearch) {
+    if (keyMatches(data, searchOptions.nextMatchKey))
+      return repeatSearch(state, snapshot, options, false);
+    if (keyMatches(data, searchOptions.previousMatchKey))
+      return repeatSearch(state, snapshot, options, true);
+  }
   const pendingOperator = operatorActionForSequence(state.pending, keymap);
   const earlyUpdate = handleNormalEscapeOrProtectedInput(
     state,

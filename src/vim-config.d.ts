@@ -292,6 +292,12 @@ export type VimConfigApi = {
     clearOnCancel: boolean;
     clearOnInsert: boolean;
     maxHighlights: number;
+    firstMatchKey: string;
+    lastMatchKey: string;
+    nextMatchKey: string;
+    previousMatchKey: string;
+    highlightColor: string;
+    currentHighlightColor: string;
   };
   exCommand: {
     autocomplete: boolean;

@@ -264,6 +264,12 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   clearOnCancel: true,
   clearOnInsert: true,
   maxHighlights: 200,
+  firstMatchKey: "enter",
+  lastMatchKey: "shift+enter",
+  nextMatchKey: "n",
+  previousMatchKey: "p",
+  highlightColor: "\x1b[43m",
+  currentHighlightColor: "\x1b[30;43m",
 }) as unknown as ResolvedVimSearch;
 
 export const DEFAULT_VIM_EASYMOTION = Object.freeze({
@@ -1497,6 +1503,19 @@ function parseSearch(
     partial.maxHighlights = value.maxHighlights;
   } else if (value.maxHighlights !== undefined) {
     warnings.push(`${sourceLabel}: piVimMode.search.maxHighlights must be a non-negative integer`);
+  }
+
+  for (const field of [
+    "firstMatchKey",
+    "lastMatchKey",
+    "nextMatchKey",
+    "previousMatchKey",
+    "highlightColor",
+    "currentHighlightColor",
+  ] as const) {
+    if (typeof value[field] === "string" && value[field].length > 0) partial[field] = value[field];
+    else if (value[field] !== undefined)
+      warnings.push(`${sourceLabel}: piVimMode.search.${field} must be a non-empty string`);
   }
 
   return Object.keys(partial).length > 0 ? { partial, warnings } : { warnings };

@@ -285,6 +285,26 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - JSON crosswalk: `piVimMode.search.clearOnInsert`
 - Compatibility aliases: none
 
+#### `vim.search.currentHighlightColor`
+
+<a id="config-property-search-currentHighlightColor"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"\\u001b[30;43m"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.currentHighlightColor`
+- Compatibility aliases: none
+
+#### `vim.search.firstMatchKey`
+
+<a id="config-property-search-firstMatchKey"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"enter"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.firstMatchKey`
+- Compatibility aliases: none
+
 #### `vim.search.highlight`
 
 <a id="config-property-search-highlight"></a>
@@ -293,6 +313,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Built-in default: `true`
 - Assignment semantics: replaces value
 - JSON crosswalk: `piVimMode.search.highlight`
+- Compatibility aliases: none
+
+#### `vim.search.highlightColor`
+
+<a id="config-property-search-highlightColor"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"\\u001b[43m"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.highlightColor`
 - Compatibility aliases: none
 
 #### `vim.search.highlightCurrent`
@@ -305,6 +335,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - JSON crosswalk: `piVimMode.search.highlightCurrent`
 - Compatibility aliases: none
 
+#### `vim.search.lastMatchKey`
+
+<a id="config-property-search-lastMatchKey"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"shift+enter"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.lastMatchKey`
+- Compatibility aliases: none
+
 #### `vim.search.maxHighlights`
 
 <a id="config-property-search-maxHighlights"></a>
@@ -313,6 +353,26 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Built-in default: `200`
 - Assignment semantics: replaces value
 - JSON crosswalk: `piVimMode.search.maxHighlights`
+- Compatibility aliases: none
+
+#### `vim.search.nextMatchKey`
+
+<a id="config-property-search-nextMatchKey"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"n"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.nextMatchKey`
+- Compatibility aliases: none
+
+#### `vim.search.previousMatchKey`
+
+<a id="config-property-search-previousMatchKey"></a>
+
+- Accepted shape: `string`
+- Built-in default: `"p"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.search.previousMatchKey`
 - Compatibility aliases: none
 
 ### `vim.ui`

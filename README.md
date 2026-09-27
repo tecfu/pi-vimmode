@@ -148,6 +148,10 @@ Example keymap/UI override:
 }
 ```
 
+### Search
+
+Normal-mode `/` searches the prompt buffer and highlights matching text live as you type. The first-match key defaults to `Enter`; the last-match key defaults to `Shift+Enter`. After a jump, the next-match key defaults to `n` and the previous-match key defaults to `p`. The first/last/next/previous match keys and ANSI highlight colors are configurable through `vim.search` in trusted `~/.pi/agent/pi-vimmode.config.js`.
+
 ### EasyMotion
 
 EasyMotion has no default binding. Bind `command.easymotion`, type a target character, then press its label to move the cursor. Matching is case-insensitive and prompt-wide, with up to 52 labels (lowercase, then uppercase). Labels are render-only substitutions, so prompt text and undo/redo history stay unchanged. Configure label color with `piVimMode.easymotion.labelColor`:

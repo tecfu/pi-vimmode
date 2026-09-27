@@ -127,9 +127,10 @@ function completeResolvedSearch(
   matcherMode: "literal" | "regex",
   matcher: { mode: "literal"; query: string } | { mode: "regex"; query: string; regex: RegExp },
   direction: "forward" | "backward",
+  cursor: EditorSnapshot["cursor"] = snapshot.cursor,
 ): ModalUpdate {
   const baseState = clearPending(state);
-  const target = findSearchMatchWithMatcher(snapshot.text, snapshot.cursor, matcher, direction);
+  const target = findSearchMatchWithMatcher(snapshot.text, cursor, matcher, direction);
   if (!target) return invalidate(baseState);
   const searchState = { query, direction, matcherMode };
   const searchHistory = addSearchHistory(state.searchHistory, { query, matcherMode });
@@ -164,6 +165,7 @@ function completeSearch(
   snapshot: EditorSnapshot,
   options: ModalOptions,
   search: PendingSearchTarget,
+  cursor: EditorSnapshot["cursor"] = snapshot.cursor,
 ): ModalUpdate {
   const resolved = resolveSearchQuery(search.query, state.lastSearch);
   const baseState = clearPending(state);
@@ -173,7 +175,7 @@ function completeSearch(
 
   const target = findSearchMatchWithMatcher(
     snapshot.text,
-    snapshot.cursor,
+    cursor,
     resolved.value.matcher,
     search.direction,
   );
@@ -213,6 +215,7 @@ function completeSearch(
     resolved.value.matcherMode,
     resolved.value.matcher,
     search.direction,
+    cursor,
   );
 }
 
@@ -306,8 +309,25 @@ export function handlePendingSearchInput(
   }
   if (keyMatches(data, "ctrl+c") || keyMatches(data, "ctrl+g"))
     return resetAndDelegate(state, options, data);
-  if (keyMatches(data, "enter") || keyMatches(data, "return")) {
-    return completeSearch(state, snapshot, options, search);
+  const searchOptions = searchForOptions(options);
+  if (keyMatches(data, searchOptions.firstMatchKey)) {
+    return completeSearch(
+      state,
+      snapshot,
+      options,
+      { ...search, direction: "forward" },
+      { line: 0, col: 0 },
+    );
+  }
+  if (keyMatches(data, searchOptions.lastMatchKey)) {
+    const lastLine = Math.max(0, snapshot.lines.length - 1);
+    return completeSearch(
+      state,
+      snapshot,
+      options,
+      { ...search, direction: "backward" },
+      { line: lastLine, col: snapshot.lines[lastLine]?.length ?? 0 },
+    );
   }
   if (keyMatches(data, "backspace")) {
     if (search.query.length === 0) return invalidate(state);

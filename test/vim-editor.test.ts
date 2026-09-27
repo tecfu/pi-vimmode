@@ -1439,14 +1439,48 @@ test("normal mode searches prompt text and repeats matches", () => {
   const { editor } = createEditor({ ...DEFAULT_VIM_OPTIONS, startMode: "normal" });
   editor.setText("one two one");
   typeKeys(editor, ["g", "g", "/", "o", "n", "e", "\r"]);
-  expectEditorState(editor, { text: "one two one", cursor: { line: 0, col: 8 }, mode: "normal" });
+  expectEditorState(editor, { text: "one two one", cursor: { line: 0, col: 0 }, mode: "normal" });
   expect(editor.render(20).join("\n")).toContain(SEARCH_CURRENT_START);
   expect(editor.render(20).join("\n")).toContain(SEARCH_START);
 
   editor.handleInput("n");
-  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
-  editor.handleInput("N");
   expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+  editor.handleInput("p");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+  editor.handleInput("shift+enter");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+});
+
+test("normal search highlights matches while typing and supports configured first/last colors", () => {
+  const { editor } = createEditor({
+    ...DEFAULT_VIM_OPTIONS,
+    startMode: "normal",
+    search: {
+      firstMatchKey: "ctrl+f",
+      lastMatchKey: "ctrl+b",
+      nextMatchKey: "]",
+      previousMatchKey: "[",
+      highlightColor: "\x1b[41m",
+      currentHighlightColor: "\x1b[97;41m",
+    },
+  });
+  editor.setText("one two one three one");
+  typeKeys(editor, ["g", "g", "/", "o", "n", "e"]);
+
+  expect(editor.render(40).join("\n")).toContain("\x1b[41mone");
+
+  editor.handleInput("ctrl+f");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+  expect(editor.render(40).join("\n")).toContain("\x1b[97;41mone");
+
+  editor.handleInput("]");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+
+  editor.handleInput("[");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
+
+  editor.handleInput("ctrl+b");
+  expect(editor.getCursor()).toEqual({ line: 0, col: 16 });
 });
 
 test("search highlight rendering can be disabled", () => {
@@ -1463,7 +1497,7 @@ test("search highlight rendering can be disabled", () => {
   });
   editor.setText("one two one");
   typeKeys(editor, ["g", "g", "/", "o", "n", "e", "\r"]);
-  expect(editor.getCursor()).toEqual({ line: 0, col: 8 });
+  expect(editor.getCursor()).toEqual({ line: 0, col: 0 });
   expect(editor.render(20).join("\n")).not.toContain(SEARCH_START);
 });
 
