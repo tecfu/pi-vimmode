@@ -906,6 +906,14 @@ function applyVisualBasicResolution(
 ): ModalUpdate | undefined {
   if (result.type === "motion") {
     if (state.pendingRegister) return invalidate(clearPending(state));
+    if (
+      (result.motion === "up" && snapshot.cursor.line === 0 && snapshot.cursor.col === 0) ||
+      (result.motion === "down" &&
+        snapshot.cursor.line === snapshot.lines.length - 1 &&
+        snapshot.cursor.col === (snapshot.lines[snapshot.cursor.line]?.length ?? 0))
+    ) {
+      return invalidate(state);
+    }
     return moveUpdate(state, result.motion, snapshot, result.count);
   }
   if (result.type === "charCommand") {
