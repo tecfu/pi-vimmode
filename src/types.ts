@@ -292,6 +292,12 @@ export type VimSearchOptions = {
   clearOnCancel: boolean;
   clearOnInsert: boolean;
   maxHighlights: number;
+  firstMatchKey: string;
+  lastMatchKey: string;
+  nextMatchKey: string;
+  previousMatchKey: string;
+  highlightColor: string;
+  currentHighlightColor: string;
 };
 
 export type ResolvedVimSearch = VimSearchOptions;

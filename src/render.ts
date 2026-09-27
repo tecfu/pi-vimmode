@@ -34,6 +34,8 @@ export type SearchHighlightRenderInput = {
   ranges?: TextRange[];
   highlightCurrent: boolean;
   maxHighlights: number;
+  highlightColor: string;
+  currentHighlightColor: string;
 };
 
 export type EasymotionRenderInput = {
@@ -108,12 +110,12 @@ function styleSelection(text: string): string {
   return `${SELECTION_START}${text}${ANSI_RESET}`;
 }
 
-function styleSearch(text: string): string {
-  return `${SEARCH_START}${text}${ANSI_RESET}`;
+function styleSearch(text: string, color: string): string {
+  return `${color}${text}${ANSI_RESET}`;
 }
 
-function styleCurrentSearch(text: string): string {
-  return `${SEARCH_CURRENT_START}${text}${ANSI_RESET}`;
+function styleCurrentSearch(text: string, color: string): string {
+  return `${color}${text}${ANSI_RESET}`;
 }
 
 function fitEasymotionLabel(label: string, width: number): string {
@@ -298,9 +300,9 @@ function renderLayoutCell(
   const searchStyle = searchRangeAt(options, chunk.lineIndex, cellStart);
   const text =
     searchStyle === "current"
-      ? styleCurrentSearch(cell)
+      ? styleCurrentSearch(cell, options.search?.currentHighlightColor ?? SEARCH_CURRENT_START)
       : searchStyle === "other"
-        ? styleSearch(cell)
+        ? styleSearch(cell, options.search?.highlightColor ?? SEARCH_START)
         : cell;
   return { text, cursor: false };
 }

@@ -667,17 +667,22 @@ Marks are in-memory only. They do not persist across sessions.
 
 ## Search settings
 
-These settings control search highlighting, not search motion semantics.
+These settings control prompt-search highlighting and navigation keys.
 
 | Path                                | Default | Accepted values      | Effect                                                                                                |
 | ----------------------------------- | ------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
-| `piVimMode.search.highlight`        | `true`  | boolean              | Enables visible highlights after successful `/`, `n`, or `N`. Search movement still works when false. |
+| `piVimMode.search.highlight`        | `true`  | boolean              | Enables visible highlights while a `/` or `?` search is being typed and after a search jump. Search movement still works when false. |
 | `piVimMode.search.highlightCurrent` | `true`  | boolean              | Uses distinct style for current match.                                                                |
 | `piVimMode.search.clearOnCancel`    | `true`  | boolean              | Clears visible highlights when pending `/` search is cancelled with `Esc`.                            |
 | `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
 | `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
 
-## EasyMotion settings
+| `piVimMode.search.firstMatchKey` | `"enter"` | string | Key that accepts a forward search from the beginning of the buffer. |
+| `piVimMode.search.lastMatchKey` | `"shift+enter"` | string | Key that accepts a backward search from the end of the buffer. |
+| `piVimMode.search.highlightColor` | `\x1b[43m` | ANSI escape code string | Color applied to non-current search matches. |
+| `piVimMode.search.currentHighlightColor` | `\x1b[30;43m` | ANSI escape code string | Color applied to the current search match. |
+| `piVimMode.search.nextMatchKey` | `"n"` | string | Key used for the next search match after a search is active. |
+| `piVimMode.search.previousMatchKey` | `"p"` | string | Key used for the previous search match after a search is active. |## EasyMotion settings
 
 These settings control the visual appearance of EasyMotion character-search labels.
 
