@@ -229,6 +229,8 @@ function clampToText(text: string, position: Position): Position {
 
 export type VimEditorOptions = {
   onShutdown?: () => void;
+  /** Reports a queue-mode change made from the keyboard, so every editor agrees. */
+  onQueueModeChange?: (active: boolean) => void;
   /** Sends text queued during a running turn (Pi followUp delivery). */
   onQueueMessage?: (text: string) => void;
 };
@@ -250,6 +252,7 @@ export class VimEditor extends CustomEditor {
   private isMacroReplaying = false;
   private promptViewportOffset: number | undefined;
   private readonly onShutdown?: () => void;
+  private readonly onQueueModeChange?: (active: boolean) => void;
   private readonly onQueueMessage?: (text: string) => void;
 
   constructor(
@@ -267,6 +270,7 @@ export class VimEditor extends CustomEditor {
     };
     this.overlayTheme = theme;
     this.onShutdown = vimOptions?.onShutdown;
+    this.onQueueModeChange = vimOptions?.onQueueModeChange;
     this.onQueueMessage = vimOptions?.onQueueMessage;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
@@ -363,6 +367,13 @@ export class VimEditor extends CustomEditor {
 
   getQueueMode(): boolean {
     return this.queueMode;
+  }
+
+  /** Keyboard toggle: flip this editor, then let the extension sync every editor. */
+  private toggleQueueModeFromKey(): void {
+    const active = !this.queueMode;
+    this.setQueueMode(active);
+    this.onQueueModeChange?.(active);
   }
 
   override handleInput(data: string): void {
@@ -626,6 +637,9 @@ export class VimEditor extends CustomEditor {
         return;
       case "invalidate":
         this.invalidate();
+        return;
+      case "toggleQueueMode":
+        this.toggleQueueModeFromKey();
         return;
       case "shutdown":
         this.onShutdown?.();

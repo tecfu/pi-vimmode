@@ -106,7 +106,8 @@ export type VimCommandAction =
   | "redo"
   | "showKeybindings"
   | "reselectVisual"
-  | "easymotion";
+  | "easymotion"
+  | "toggleQueueMode";
 export type VimMacroAction = "record" | "play";
 export type VimMarkAction = "set" | "jumpExact" | "jumpLine";
 export type VimInsertAction =

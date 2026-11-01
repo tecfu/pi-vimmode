@@ -382,6 +382,7 @@ Rules:
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                                                                              |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                                                                                     |
 | `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                                                                             |
+| `piVimMode.keymap.commands.toggleQueueMode`         | `["gz"]`     | Toggle queue mode for follow-up submits while a turn runs.                                                                                                               |
 
 `halfPageDown` and `halfPageUp` are prompt-local cursor motions in normal and visual modes. Their default `ctrl+d` / `ctrl+u` keys are only allowed for these motion actions; mapping those protected control keys to unrelated actions is rejected with a warning. They are not supported operator motions, so adding them to `piVimMode.keymap.operatorMotions` is ignored with a warning.
 
@@ -669,13 +670,13 @@ Marks are in-memory only. They do not persist across sessions.
 
 These settings control prompt-search highlighting and navigation keys.
 
-| Path                                | Default | Accepted values      | Effect                                                                                                |
-| ----------------------------------- | ------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
+| Path                                | Default | Accepted values      | Effect                                                                                                                               |
+| ----------------------------------- | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `piVimMode.search.highlight`        | `true`  | boolean              | Enables visible highlights while a `/` or `?` search is being typed and after a search jump. Search movement still works when false. |
-| `piVimMode.search.highlightCurrent` | `true`  | boolean              | Uses distinct style for current match.                                                                |
-| `piVimMode.search.clearOnCancel`    | `true`  | boolean              | Clears visible highlights when pending `/` search is cancelled with `Esc`.                            |
-| `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.              |
-| `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                           |
+| `piVimMode.search.highlightCurrent` | `true`  | boolean              | Uses distinct style for current match.                                                                                               |
+| `piVimMode.search.clearOnCancel`    | `true`  | boolean              | Clears visible highlights when pending `/` search is cancelled with `Esc`.                                                           |
+| `piVimMode.search.clearOnInsert`    | `true`  | boolean              | Clears visible highlights when entering insert mode. Does not erase repeat-search state.                                             |
+| `piVimMode.search.maxHighlights`    | `200`   | non-negative integer | Maximum non-current match ranges rendered. `0` disables non-current ranges.                                                          |
 
 | `piVimMode.search.firstMatchKey` | `"enter"` | string | Key that accepts a forward search from the beginning of the buffer. |
 | `piVimMode.search.lastMatchKey` | `"shift+enter"` | string | Key that accepts a backward search from the end of the buffer. |
@@ -928,7 +929,8 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "repeatChange": ["."],
         "reselectVisual": ["gv"],
         "undo": ["u"],
-        "redo": ["ctrl+r"]
+        "redo": ["ctrl+r"],
+        "toggleQueueMode": ["gz"]
       },
       "macros": {
         "record": ["q"],

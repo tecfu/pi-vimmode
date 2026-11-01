@@ -133,7 +133,11 @@ function createEditor(
   diagnostics: VimDiagnostics = { warnings: [] },
   initialHardwareCursorVisible = false,
   terminalSize: { rows?: number; columns?: number } = {},
-  vimOptions?: { onShutdown?: () => void; onQueueMessage?: (text: string) => void },
+  vimOptions?: {
+    onShutdown?: () => void;
+    onQueueMessage?: (text: string) => void;
+    onQueueModeChange?: (active: boolean) => void;
+  },
 ) {
   const tuiState = createEditorTui(initialHardwareCursorVisible, terminalSize);
   return {
@@ -2776,4 +2780,74 @@ test("queue mode status renders a QUEUE label without stealing status items", ()
   editor.setQueueMode(false);
   expect(editor.render(40).join("\n")).not.toContain("QUEUE");
   expect(queued).toEqual([]);
+});
+
+test("gz in normal mode toggles queue mode and reports the change", () => {
+  const changes: boolean[] = [];
+  const { editor } = createEditor(
+    normalOpts,
+    { warnings: [] },
+    false,
+    {},
+    {
+      onQueueModeChange: (active) => changes.push(active),
+    },
+  );
+
+  expect(editor.getQueueMode()).toBe(false);
+  expect(editor.render(40).join("\n")).not.toContain("QUEUE");
+
+  typeKeys(editor, ["g", "z"]);
+  expect(editor.getQueueMode()).toBe(true);
+  expect(editor.render(40).join("\n")).toContain("QUEUE");
+
+  typeKeys(editor, ["g", "z"]);
+  expect(editor.getQueueMode()).toBe(false);
+  expect(changes).toEqual([true, false]);
+});
+
+test("lowercase q keeps macro recording and never toggles queue mode", () => {
+  const { editor } = createEditor(normalOpts);
+
+  typeKeys(editor, ["q", "a", "x", "q"]);
+
+  expect(editor.getQueueMode()).toBe(false);
+  expect(editor.render(40).join("\n")).not.toContain("QUEUE");
+});
+
+test("toggleQueueMode honours a remapped key and drops the default", () => {
+  const { editor } = createEditor({
+    ...DEFAULT_VIM_OPTIONS,
+    startMode: "normal",
+    keymap: {
+      ...DEFAULT_VIM_OPTIONS.keymap!,
+      commands: {
+        ...DEFAULT_VIM_OPTIONS.keymap!.commands,
+        toggleQueueMode: ["M"],
+      },
+    },
+  });
+
+  editor.handleInput("z");
+  expect(editor.getQueueMode()).toBe(false);
+
+  editor.handleInput("M");
+  expect(editor.getQueueMode()).toBe(true);
+});
+
+test("queue mode toggle follows the piVimMode keymap setting", () => {
+  const resolved = resolveVimOptions({
+    piVimMode: { keymap: { commands: { toggleQueueMode: ["z", "M"] } } },
+  });
+  expect(resolved.warnings).toEqual([]);
+  expect(resolved.options.keymap?.commands.toggleQueueMode).toEqual(["z", "M"]);
+
+  const { editor } = createEditor({ ...resolved.options, startMode: "normal" });
+
+  editor.handleInput("Q");
+  expect(editor.getQueueMode()).toBe(false);
+
+  editor.handleInput("M");
+  expect(editor.getQueueMode()).toBe(true);
+  expect(editor.render(40).join("\n")).toContain("QUEUE");
 });

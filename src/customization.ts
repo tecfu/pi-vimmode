@@ -121,6 +121,7 @@ const COMMAND_DESCRIPTIONS: Record<VimCommandAction, string> = {
   showKeybindings: "show keybindings popup",
   reselectVisual: "reselect last visual selection",
   easymotion: "jump to character on current file (EasyMotion)",
+  toggleQueueMode: "toggle queue mode for follow-up submits",
 };
 
 const MOTION_DESCRIPTIONS: Record<VimMotionAction, string> = {

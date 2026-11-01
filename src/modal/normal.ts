@@ -656,6 +656,8 @@ function applyCommandGroup4(
         : invalidate(withNoopFeedback(nextState, options, "redo stack empty"));
     case "reselectVisual":
       return reselectVisualUpdate(nextState, snapshot, options);
+    case "toggleQueueMode":
+      return withEffects(nextState, [{ type: "toggleQueueMode" }, { type: "invalidate" }]);
     case "showKeybindings": {
       const popup = keybindingsPopup(options);
       return withEffects({ ...nextState, helpPopup: popup }, [

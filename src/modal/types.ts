@@ -240,6 +240,7 @@ export type ModalEffect =
     }
   | { type: "invalidate" }
   | { type: "terminalCursor"; style: CursorStyle }
+  | { type: "toggleQueueMode" }
   | { type: "shutdown" };
 
 export type ModalUpdate = {

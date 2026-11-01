@@ -147,6 +147,7 @@ export const KEYMAP_COMMAND_DESCRIPTORS = {
   showKeybindings: { defaults: [] },
   reselectVisual: { defaults: ["gv"] },
   easymotion: { defaults: [] },
+  toggleQueueMode: { defaults: ["gz"] },
 } as const satisfies Record<VimCommandAction, CommandDescriptor>;
 
 export function deriveActionKeys<T extends Record<string, KeymapDescriptor>>(

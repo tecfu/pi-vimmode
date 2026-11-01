@@ -971,3 +971,52 @@ test("queue mode submits reach Pi as follow-up messages", async () => {
   expect(queuedMessages).toEqual([{ content: "next", options: { deliverAs: "followUp" } }]);
   expect(editor.getText()).toBe("");
 });
+
+test("gz in normal mode toggles queue mode for tracked and later editors", async () => {
+  const { hooks, commands, realEditors } = createLifecycleHarness(undefined, true);
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  const factory = ctx.ui.setCalls[0]!;
+  factory({}, {}, {});
+  const editor = realEditors[0]!;
+
+  editor.handleInput("\x1b");
+  expect(editor.getVimMode()).toBe("normal");
+
+  editor.handleInput("g");
+  editor.handleInput("z");
+  expect(editor.getQueueMode()).toBe(true);
+  expect(editor.render(60).join("\n")).toContain("QUEUE");
+
+  await commands.get("vimmode")?.handler("queue status", ctx);
+  expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode enabled", "info"]);
+
+  factory({}, {}, {});
+  expect(realEditors[1]!.getQueueMode()).toBe(true);
+
+  editor.handleInput("g");
+  editor.handleInput("z");
+  expect(editor.getQueueMode()).toBe(false);
+  await commands.get("vimmode")?.handler("queue status", ctx);
+  expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
+});
+
+test("keyboard toggling announces the queue mode switch", async () => {
+  const { hooks, realEditors } = createLifecycleHarness(undefined, true);
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  ctx.ui.setCalls[0]!({}, {}, {});
+  const editor = realEditors[0]!;
+
+  editor.handleInput("\x1b");
+  editor.handleInput("g");
+  editor.handleInput("z");
+  expect(ctx.ui.notifications.at(-1)).toEqual([
+    "pi-vimmode queue mode enabled: submits during a running turn are queued as follow-ups",
+    "info",
+  ]);
+
+  editor.handleInput("g");
+  editor.handleInput("z");
+  expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
+});
