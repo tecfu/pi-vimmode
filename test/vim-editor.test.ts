@@ -2782,7 +2782,7 @@ test("queue mode status renders a QUEUE label without stealing status items", ()
   expect(queued).toEqual([]);
 });
 
-test("Q in normal mode toggles queue mode and reports the change", () => {
+test("gz in normal mode toggles queue mode and reports the change", () => {
   const changes: boolean[] = [];
   const { editor } = createEditor(
     normalOpts,
@@ -2797,11 +2797,11 @@ test("Q in normal mode toggles queue mode and reports the change", () => {
   expect(editor.getQueueMode()).toBe(false);
   expect(editor.render(40).join("\n")).not.toContain("QUEUE");
 
-  editor.handleInput("Q");
+  typeKeys(editor, ["g", "z"]);
   expect(editor.getQueueMode()).toBe(true);
   expect(editor.render(40).join("\n")).toContain("QUEUE");
 
-  editor.handleInput("Q");
+  typeKeys(editor, ["g", "z"]);
   expect(editor.getQueueMode()).toBe(false);
   expect(changes).toEqual([true, false]);
 });
@@ -2828,7 +2828,7 @@ test("toggleQueueMode honours a remapped key and drops the default", () => {
     },
   });
 
-  editor.handleInput("Q");
+  editor.handleInput("z");
   expect(editor.getQueueMode()).toBe(false);
 
   editor.handleInput("M");
@@ -2837,17 +2837,17 @@ test("toggleQueueMode honours a remapped key and drops the default", () => {
 
 test("queue mode toggle follows the piVimMode keymap setting", () => {
   const resolved = resolveVimOptions({
-    piVimMode: { keymap: { commands: { toggleQueueMode: ["z"] } } },
+    piVimMode: { keymap: { commands: { toggleQueueMode: ["z", "M"] } } },
   });
   expect(resolved.warnings).toEqual([]);
-  expect(resolved.options.keymap?.commands.toggleQueueMode).toEqual(["z"]);
+  expect(resolved.options.keymap?.commands.toggleQueueMode).toEqual(["z", "M"]);
 
   const { editor } = createEditor({ ...resolved.options, startMode: "normal" });
 
   editor.handleInput("Q");
   expect(editor.getQueueMode()).toBe(false);
 
-  editor.handleInput("z");
+  editor.handleInput("M");
   expect(editor.getQueueMode()).toBe(true);
   expect(editor.render(40).join("\n")).toContain("QUEUE");
 });

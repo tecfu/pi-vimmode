@@ -884,7 +884,7 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Canonical factory: `vim.action.command.toggleQueueMode()`
 - Supported mapping scopes: `normal`
 - Arguments: none
-- Default keys: `Q`
+- Default keys: `gz`
 - Compatibility aliases: none
 
 #### `command.undo`

@@ -204,9 +204,9 @@ describe("keymap descriptors", () => {
     expect(commands.searchWordBackward).toEqual(["#"]);
   });
 
-  test("queue mode toggles on uppercase Q while macros keep lowercase q", () => {
+  test("queue mode toggles on gz while macros keep lowercase q", () => {
     const commands = deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS);
-    expect(commands.toggleQueueMode).toEqual(["Q"]);
+    expect(commands.toggleQueueMode).toEqual(["gz"]);
     expect(deriveDefaultKeyBindings(KEYMAP_MACRO_DESCRIPTORS).record).toEqual(["q"]);
   });
 });

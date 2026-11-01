@@ -382,7 +382,7 @@ Rules:
 | `piVimMode.keymap.commands.undo`                    | `["u"]`      | Delegate to Pi native undo.                                                                                                                                              |
 | `piVimMode.keymap.commands.redo`                    | `["ctrl+r"]` | Redo the latest prompt text/cursor state undone by normal-mode undo.                                                                                                     |
 | `piVimMode.keymap.commands.showKeybindings`         | `[]`         | Optional normal-mode shortcut that opens the same bounded read-only popup as `:keybindings`.                                                                             |
-| `piVimMode.keymap.commands.toggleQueueMode`         | `["Q"]`      | Toggle queue mode for follow-up submits while a turn runs.                                                                                                               |
+| `piVimMode.keymap.commands.toggleQueueMode`         | `["gz"]`     | Toggle queue mode for follow-up submits while a turn runs.                                                                                                               |
 
 `halfPageDown` and `halfPageUp` are prompt-local cursor motions in normal and visual modes. Their default `ctrl+d` / `ctrl+u` keys are only allowed for these motion actions; mapping those protected control keys to unrelated actions is rejected with a warning. They are not supported operator motions, so adding them to `piVimMode.keymap.operatorMotions` is ignored with a warning.
 
@@ -930,7 +930,7 @@ This is the resolved default shape. Comments are not valid JSON; this block omit
         "reselectVisual": ["gv"],
         "undo": ["u"],
         "redo": ["ctrl+r"],
-        "toggleQueueMode": ["Q"]
+        "toggleQueueMode": ["gz"]
       },
       "macros": {
         "record": ["q"],
