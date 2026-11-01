@@ -13,7 +13,7 @@ Runtime behavior:
 - Installs automatically on `session_start`, `resources_discover`, and `agent_end`.
 - Re-runs installation on the next tick for startup/resource timing reliability.
 - Registers `/vimmode [on|off|toggle|status|reload]` to temporarily enable/disable the modal editor without uninstalling the extension.
-- Registers `/vimmode queue [on|off|toggle|status]` to toggle queue mode (see [Queue mode](#queue-mode)).
+- Registers `/vimmode queue [on|off|toggle|status]` to toggle queue mode (see [Queue mode](#queue-mode)), and binds `Q` in normal mode to the same toggle.
 - Loads settings from global and project Pi settings whenever it installs.
 - Shows status key `pi-vimmode` as `vim` when settings parse cleanly.
 - Shows `vim ⚠` when settings load with warnings.
@@ -63,6 +63,7 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 Queue mode changes what `Enter` does while Pi is running a turn. Pi's default is to steer: the submitted text interrupts the running turn at the next tool boundary. In queue mode the submitted text joins Pi's follow-up queue instead, and Pi sends it as a normal user turn after the current turn finishes.
 
 - Toggle it at runtime with `/vimmode queue on`, `/vimmode queue off`, `/vimmode queue toggle`, or `/vimmode queue status`. A bare `/vimmode queue` toggles.
+- `Q` in normal mode toggles queue mode without leaving the prompt. That key is the bindable `command.toggleQueueMode` action (default `Q`) and follows normal keymap validation and scoped mappings like any other semantic command; lowercase `q` stays the macro-record key, so `q{a-z}`, `q`, and `@{a-z}` are unchanged.
 - The status border shows `QUEUE` next to the mode label while queue mode is active, for example `INSERT QUEUE`.
 - The mode is runtime state, not a `piVimMode` setting: it starts off in a new Pi process and applies to every prompt editor the extension installs, including editors created after the toggle.
 - Submission keeps the trimmed prompt text, records it in prompt history, and clears the editor exactly like a normal submit.

@@ -877,6 +877,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Default keys: `~`
 - Compatibility aliases: none
 
+#### `command.toggleQueueMode`
+
+<a id="config-action-command-toggleQueueMode"></a>
+
+- Canonical factory: `vim.action.command.toggleQueueMode()`
+- Supported mapping scopes: `normal`
+- Arguments: none
+- Default keys: `Q`
+- Compatibility aliases: none
+
 #### `command.undo`
 
 <a id="config-action-command-undo"></a>

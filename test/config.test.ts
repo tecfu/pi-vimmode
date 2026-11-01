@@ -1071,7 +1071,7 @@ test("parses prompt structure and transform options", () => {
     piVimMode: {
       keymap: {
         textObjects: {
-          kinds: { inner: ["Z"], around: ["Q"] },
+          kinds: { inner: ["Z"], around: ["M"] },
           targets: { codeFence: ["R"], tag: ["H"] },
         },
       },

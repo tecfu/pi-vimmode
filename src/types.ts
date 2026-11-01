@@ -97,7 +97,8 @@ export type VimCommandAction =
   | "redo"
   | "showKeybindings"
   | "reselectVisual"
-  | "easymotion";
+  | "easymotion"
+  | "toggleQueueMode";
 
 export type VimTextObjectKind = "inner" | "around";
 

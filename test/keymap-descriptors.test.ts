@@ -102,6 +102,7 @@ const expectedCommands = [
   "showKeybindings",
   "reselectVisual",
   "easymotion",
+  "toggleQueueMode",
 ];
 const expectedTextObjectTargets = [
   "word",
@@ -201,5 +202,11 @@ describe("keymap descriptors", () => {
     expect(commands.deleteCharBefore).toEqual(["X"]);
     expect(commands.searchWordForward).toEqual(["*"]);
     expect(commands.searchWordBackward).toEqual(["#"]);
+  });
+
+  test("queue mode toggles on uppercase Q while macros keep lowercase q", () => {
+    const commands = deriveDefaultKeyBindings(KEYMAP_COMMAND_DESCRIPTORS);
+    expect(commands.toggleQueueMode).toEqual(["Q"]);
+    expect(deriveDefaultKeyBindings(KEYMAP_MACRO_DESCRIPTORS).record).toEqual(["q"]);
   });
 });
