@@ -998,3 +998,21 @@ test("Q in normal mode toggles queue mode for tracked and later editors", async 
   await commands.get("vimmode")?.handler("queue status", ctx);
   expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
 });
+
+test("keyboard toggling announces the queue mode switch", async () => {
+  const { hooks, realEditors } = createLifecycleHarness(undefined, true);
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  ctx.ui.setCalls[0]!({}, {}, {});
+  const editor = realEditors[0]!;
+
+  editor.handleInput("\x1b");
+  editor.handleInput("Q");
+  expect(ctx.ui.notifications.at(-1)).toEqual([
+    "pi-vimmode queue mode enabled: submits during a running turn are queued as follow-ups",
+    "info",
+  ]);
+
+  editor.handleInput("Q");
+  expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
+});

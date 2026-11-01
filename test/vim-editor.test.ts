@@ -2834,3 +2834,20 @@ test("toggleQueueMode honours a remapped key and drops the default", () => {
   editor.handleInput("M");
   expect(editor.getQueueMode()).toBe(true);
 });
+
+test("queue mode toggle follows the piVimMode keymap setting", () => {
+  const resolved = resolveVimOptions({
+    piVimMode: { keymap: { commands: { toggleQueueMode: ["z"] } } },
+  });
+  expect(resolved.warnings).toEqual([]);
+  expect(resolved.options.keymap?.commands.toggleQueueMode).toEqual(["z"]);
+
+  const { editor } = createEditor({ ...resolved.options, startMode: "normal" });
+
+  editor.handleInput("Q");
+  expect(editor.getQueueMode()).toBe(false);
+
+  editor.handleInput("z");
+  expect(editor.getQueueMode()).toBe(true);
+  expect(editor.render(40).join("\n")).toContain("QUEUE");
+});

@@ -64,7 +64,9 @@ Queue mode changes what `Enter` does while Pi is running a turn. Pi's default is
 
 - Toggle it at runtime with `/vimmode queue on`, `/vimmode queue off`, `/vimmode queue toggle`, or `/vimmode queue status`. A bare `/vimmode queue` toggles.
 - `Q` in normal mode toggles queue mode without leaving the prompt. That key is the bindable `command.toggleQueueMode` action (default `Q`) and follows normal keymap validation and scoped mappings like any other semantic command; lowercase `q` stays the macro-record key, so `q{a-z}`, `q`, and `@{a-z}` are unchanged.
-- The status border shows `QUEUE` next to the mode label while queue mode is active, for example `INSERT QUEUE`.
+- Rebind the toggle like any other semantic normal-mode command: `{ "piVimMode": { "keymap": { "commands": { "toggleQueueMode": ["z"] } } } }` in settings, or `vim.keymap.set("n", "z", vim.action.command.toggleQueueMode())` in trusted JavaScript. `:keybindings toggleQueueMode` shows the effective key.
+- Pick a key the finite grammar does not already own. Commands and motions share one key namespace, and a command binding wins, so binding `toggleQueueMode` to a motion key silently replaces that motion: `e` is word-end, so `toggleQueueMode: ["e"]` makes `e` toggle queue mode and leaves `de`, `ce`, `ye`, and `3e` invalid. Free single keys today are `z` and the uppercase `Z`, `M`, `U`, `H`, `K`, and `L`.
+- The status border shows `QUEUE` next to the mode label while queue mode is active, for example `INSERT QUEUE`, and toggling announces the change through a Pi notification, so both the border and the notification confirm the mode switch.
 - The mode is runtime state, not a `piVimMode` setting: it starts off in a new Pi process and applies to every prompt editor the extension installs, including editors created after the toggle.
 - Submission keeps the trimmed prompt text, records it in prompt history, and clears the editor exactly like a normal submit.
 - When Pi is idle, `Enter` keeps its normal submit path, so queue mode never delays the first message of a turn and never queues twice.

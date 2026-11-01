@@ -144,6 +144,7 @@ type EditorState = {
   currentShutdown?: () => void;
   queueMessage?: (text: string) => void;
   queueModeChange?: (active: boolean) => void;
+  notify?: (message: string, level?: "info" | "warning" | "error") => void;
   enabled: boolean;
   agentBusy: boolean;
   queueMode: boolean;
@@ -154,6 +155,7 @@ type EditorState = {
 
 function finishInstall(state: EditorState, ctx: ExtensionContext, force = false): void {
   state.currentShutdown = () => ctx.shutdown();
+  state.notify = (message, level = "info") => ctx.ui.notify(message, level);
   const current = ctx.ui.getEditorComponent();
   if (current === state.editorFactory) {
     state.hasInstalledFactory = true;
@@ -309,9 +311,18 @@ async function handleVimCommand(
   notifyVimStatus(state, ctx);
 }
 
-function applyQueueMode(state: EditorState, enable: boolean): void {
+const QUEUE_MODE_ENABLED_MESSAGE =
+  "pi-vimmode queue mode enabled: submits during a running turn are queued as follow-ups";
+const QUEUE_MODE_DISABLED_MESSAGE = "pi-vimmode queue mode disabled";
+
+function applyQueueMode(
+  state: EditorState,
+  enable: boolean,
+  notify?: (message: string, level?: "info" | "warning" | "error") => void,
+): void {
   state.queueMode = enable;
   for (const editor of state.editors) editor.setQueueMode(enable);
+  notify?.(enable ? QUEUE_MODE_ENABLED_MESSAGE : QUEUE_MODE_DISABLED_MESSAGE);
 }
 
 function handleQueueCommand(subaction: string, state: EditorState, ctx: ExtensionContext): void {
@@ -324,13 +335,7 @@ function handleQueueCommand(subaction: string, state: EditorState, ctx: Extensio
     return;
   }
   const enable = subaction === "on" || (subaction === "toggle" && !state.queueMode);
-  applyQueueMode(state, enable);
-  ctx.ui.notify(
-    enable
-      ? "pi-vimmode queue mode enabled: submits during a running turn are queued as follow-ups"
-      : "pi-vimmode queue mode disabled",
-    "info",
-  );
+  applyQueueMode(state, enable, (message, level) => ctx.ui.notify(message, level));
 }
 
 function registerVimCommand(pi: ExtensionAPI, state: EditorState): void {
@@ -346,7 +351,7 @@ export function registerVimLifecycle(
 ): void {
   const state = createEditorState(dependencies);
   state.queueMessage = (text) => pi.sendUserMessage(text, { deliverAs: "followUp" });
-  state.queueModeChange = (active) => applyQueueMode(state, active);
+  state.queueModeChange = (active) => applyQueueMode(state, active, state.notify);
   registerVimCommand(pi, state);
   pi.on("session_start", (_event, ctx) => installEditorSoon(state, ctx));
   pi.on("resources_discover", (_event, ctx) => installEditorSoon(state, ctx));
