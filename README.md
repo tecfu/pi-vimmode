@@ -101,6 +101,8 @@ Default modes:
 
 `Esc` in normal mode delegates to Pi so interrupt/abort behavior still works. `Esc` in visual modes cancels the selection and returns to normal mode.
 
+Queue mode (`/vimmode queue on|off|toggle|status`) makes `Enter` queue the prompt as a Pi follow-up while a turn is running instead of steering it. The status border shows `QUEUE` while it is active. See [`docs/features.md#queue-mode`](https://github.com/pekochan069/pi-vimmode/blob/main/docs/features.md#queue-mode).
+
 ## Documentation
 
 Canonical user-facing docs live under `docs/`:

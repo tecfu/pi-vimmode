@@ -50,6 +50,7 @@ type FakeEditor = {
   options: ResolvedVimEditorOptions;
   diagnostics: VimDiagnostics;
   busyCalls: boolean[];
+  queueModeCalls: boolean[];
   reconfigureCalls: Array<[VimConfigPlan, VimDiagnostics]>;
   diagnosticsCalls: VimDiagnostics[];
   resetCount: number;
@@ -58,6 +59,7 @@ type FakeEditor = {
   updateDiagnostics: (diagnostics: VimDiagnostics) => void;
   resetTerminalCursorStyle: (options?: { restoreHardwareCursorVisibility?: boolean }) => void;
   setAgentBusy: (active: boolean) => void;
+  setQueueMode: (active: boolean) => void;
 };
 
 function createUi(): FakeUi {
@@ -92,7 +94,10 @@ function createContext(cwd = "/workspace"): FakeContext {
   return ctx;
 }
 
-function createRealEditor(configuration: VimRuntimeConfiguration): VimEditor {
+function createRealEditor(
+  configuration: VimRuntimeConfiguration,
+  vimOptions?: { onShutdown?: () => void; onQueueMessage?: (text: string) => void },
+): VimEditor {
   const tui = {
     terminal: { rows: 24, columns: 80, write: () => {} },
     requestRender: () => {},
@@ -115,7 +120,7 @@ function createRealEditor(configuration: VimRuntimeConfiguration): VimEditor {
     getDefinition: () => ({ defaultKeys: [] }),
     getConflicts: () => [],
   } as any;
-  return new VimEditor(tui, theme, keybindings, configuration);
+  return new VimEditor(tui, theme, keybindings, configuration, vimOptions);
 }
 
 function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
@@ -124,6 +129,7 @@ function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
     options: configuration.plan.options,
     diagnostics: configuration.diagnostics,
     busyCalls: [],
+    queueModeCalls: [],
     reconfigureCalls: [],
     diagnosticsCalls: [],
     resetCount: 0,
@@ -144,6 +150,9 @@ function createFakeEditor(configuration: VimRuntimeConfiguration): FakeEditor {
     },
     setAgentBusy: (active) => {
       editor.busyCalls.push(active);
+    },
+    setQueueMode: (active) => {
+      editor.queueModeCalls.push(active);
     },
   };
   return editor;
@@ -169,6 +178,7 @@ function createLifecycleHarness(
   const rejectedLoads = new Set<number>();
   const deferredLoads = new Set<number>();
   const resolveDeferred = new Map<number, (result: VimConfigLoadResult) => void>();
+  const queuedMessages: Array<{ content: unknown; options: unknown }> = [];
   let loadIndex = 0;
 
   const pi = {
@@ -177,6 +187,9 @@ function createLifecycleHarness(
     },
     registerCommand: (name: string, command: Command) => {
       commands.set(name, command);
+    },
+    sendUserMessage: (content: unknown, sendOptions?: unknown) => {
+      queuedMessages.push({ content, options: sendOptions });
     },
   };
 
@@ -204,7 +217,7 @@ function createLifecycleHarness(
     createEditor: (_tui, _theme, _keybindings, configuration, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
       if (useRealEditor) {
-        const editor = createRealEditor(configuration);
+        const editor = createRealEditor(configuration, vimOptions);
         realEditors.push(editor);
         return editor;
       }
@@ -220,6 +233,7 @@ function createLifecycleHarness(
   return {
     hooks,
     commands,
+    queuedMessages,
     scheduled,
     loadCalls,
     createdEditors,
@@ -912,4 +926,48 @@ test("vimmode command toggles editor off and on", async () => {
   expect(ctx.ui.component).toBe(factory);
   expect(ctx.ui.statuses.at(-1)).toEqual(["pi-vimmode", "vim"]);
   expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode enabled", "info"]);
+});
+
+test("vimmode queue subcommand toggles queue mode on tracked and new editors", async () => {
+  const { hooks, commands, createdEditors } = createLifecycleHarness();
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  const factory = ctx.ui.setCalls[0]!;
+  factory({}, {}, {});
+
+  await commands.get("vimmode")?.handler("queue", ctx);
+  expect(createdEditors[0]!.queueModeCalls).toEqual([true]);
+  expect(ctx.ui.notifications.at(-1)?.[0]).toContain("queue mode enabled");
+
+  factory({}, {}, {});
+  expect(createdEditors[1]!.queueModeCalls).toEqual([true]);
+
+  await commands.get("vimmode")?.handler("queue off", ctx);
+  expect(createdEditors[0]!.queueModeCalls).toEqual([true, false]);
+
+  await commands.get("vimmode")?.handler("queue status", ctx);
+  expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
+
+  await commands.get("vimmode")?.handler("queue sideways", ctx);
+  expect(ctx.ui.notifications.at(-1)).toEqual([
+    "Usage: /vimmode queue [on|off|toggle|status]",
+    "warning",
+  ]);
+});
+
+test("queue mode submits reach Pi as follow-up messages", async () => {
+  const { hooks, commands, realEditors, queuedMessages } = createLifecycleHarness(undefined, true);
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  const factory = ctx.ui.setCalls[0]!;
+  factory({}, {}, {});
+  hooks.get("agent_start")?.({}, ctx);
+  await commands.get("vimmode")?.handler("queue on", ctx);
+
+  const editor = realEditors[0]!;
+  for (const key of ["n", "e", "x", "t"]) editor.handleInput(key);
+  editor.handleInput("\r");
+
+  expect(queuedMessages).toEqual([{ content: "next", options: { deliverAs: "followUp" } }]);
+  expect(editor.getText()).toBe("");
 });
