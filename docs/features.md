@@ -12,7 +12,8 @@ Runtime behavior:
 
 - Installs automatically on `session_start`, `resources_discover`, and `agent_end`.
 - Re-runs installation on the next tick for startup/resource timing reliability.
-- Registers `/vimmode [on|off|toggle|status]` to temporarily enable/disable the modal editor without uninstalling the extension.
+- Registers `/vimmode [on|off|toggle|status|reload]` to temporarily enable/disable the modal editor without uninstalling the extension.
+- Registers `/vimmode queue [on|off|toggle|status]` to toggle queue mode (see [Queue mode](#queue-mode)).
 - Loads settings from global and project Pi settings whenever it installs.
 - Shows status key `pi-vimmode` as `vim` when settings parse cleanly.
 - Shows `vim ⚠` when settings load with warnings.
@@ -56,6 +57,18 @@ Because pi-vimmode replaces Pi's main prompt editor, keep the recovery path hand
 | Visual block | `V-BLOCK` | Rectangular selection. Selected cells are highlighted.                                                                                       |
 
 Startup mode is `insert` by default. Configure `piVimMode.startMode` to start new prompts in `normal` instead.
+
+## Queue mode
+
+Queue mode changes what `Enter` does while Pi is running a turn. Pi's default is to steer: the submitted text interrupts the running turn at the next tool boundary. In queue mode the submitted text joins Pi's follow-up queue instead, and Pi sends it as a normal user turn after the current turn finishes.
+
+- Toggle it at runtime with `/vimmode queue on`, `/vimmode queue off`, `/vimmode queue toggle`, or `/vimmode queue status`. A bare `/vimmode queue` toggles.
+- The status border shows `QUEUE` next to the mode label while queue mode is active, for example `INSERT QUEUE`.
+- The mode is runtime state, not a `piVimMode` setting: it starts off in a new Pi process and applies to every prompt editor the extension installs, including editors created after the toggle.
+- Submission keeps the trimmed prompt text, records it in prompt history, and clears the editor exactly like a normal submit.
+- When Pi is idle, `Enter` keeps its normal submit path, so queue mode never delays the first message of a turn and never queues twice.
+- Queue mode covers plain `Enter` submission. `Alt+Enter` (`app.message.followUp`) stays available and behaves the same way whether or not queue mode is on.
+- Prompt templates and extension commands are not expanded for queued text. The text reaches Pi as a user message with the follow-up delivery mode, which is the same contract Pi uses for queued follow-ups.
 
 ## Quick reference
 
@@ -859,6 +872,7 @@ The editor renders a bordered prompt area and configurable status border.
 Default status items:
 
 - mode label: `INSERT`, `NORMAL`, `VISUAL`, `V-LINE`, `V-BLOCK`
+- queue mode marker `QUEUE` when `/vimmode queue on` is active
 - pending operator or prefix, e.g. `d…`, `g…`, `/query…`, `m…`, `:command…`
 - visual selection summary and preview
 
@@ -893,7 +907,7 @@ Limitations:
 
 Pi remains owner of app-level shortcuts.
 
-- `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command.
+- `Enter` submits from base prompt-editing modes when no `/` search or `:` Ex command-line is pending. Pending search uses Enter to complete the search; pending Ex uses Enter to execute the command. With queue mode on and Pi running a turn, Enter queues a follow-up instead of steering.
 - `Ctrl-C`, `Ctrl-D`, `Ctrl-G`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, model/thinking shortcuts, autocomplete controls, external editor shortcuts, and image paste stay Pi-owned unless a shortcut is explicitly implemented or explicitly bound by pi-vimmode.
 - Protected Pi shortcut names are rejected from `piVimMode.keymap` with warnings that include the protected key reason. Use `:mapcheck <key>` for runtime ownership details.
 - Protected key rejection can be explicitly overridden per settings layer through `piVimMode.keymap.allowProtectedOverrides`. See `docs/settings.md` for allow-list rules, scope, and limits.

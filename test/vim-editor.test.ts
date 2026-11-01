@@ -133,7 +133,7 @@ function createEditor(
   diagnostics: VimDiagnostics = { warnings: [] },
   initialHardwareCursorVisible = false,
   terminalSize: { rows?: number; columns?: number } = {},
-  vimOptions?: { onShutdown?: () => void },
+  vimOptions?: { onShutdown?: () => void; onQueueMessage?: (text: string) => void },
 ) {
   const tuiState = createEditorTui(initialHardwareCursorVisible, terminalSize);
   return {
@@ -146,6 +146,36 @@ function createEditor(
     ),
     ...tuiState,
   };
+}
+
+const submittingKeybindings = {
+  matches: (data: string, binding: string) => binding === "tui.input.submit" && data === "\r",
+  getKeys() {
+    return [];
+  },
+  getDefinition() {
+    return { defaultKeys: [] };
+  },
+  getConflicts() {
+    return [];
+  },
+} as any;
+
+function createSubmittingEditor(vimOptions: { onQueueMessage?: (text: string) => void } = {}): {
+  editor: VimEditor;
+  submitted: string[];
+} {
+  const tuiState = createEditorTui(false, {});
+  const editor = new VimEditor(
+    tuiState.tui,
+    editorTheme,
+    submittingKeybindings,
+    runtimeConfiguration(),
+    vimOptions,
+  );
+  const submitted: string[] = [];
+  editor.onSubmit = (text) => submitted.push(text);
+  return { editor, submitted };
 }
 
 function expectRenderedWidth(lines: string[], width: number) {
@@ -2675,4 +2705,75 @@ test("missing shutdown callback does not throw", () => {
   editor.setText("hello");
   runEx(editor, "q");
   expect(editor.getText()).toBe("hello");
+});
+
+test("queue mode sends Enter through the follow-up queue while the agent is busy", () => {
+  const queued: string[] = [];
+  const { editor, submitted } = createSubmittingEditor({
+    onQueueMessage: (text) => queued.push(text),
+  });
+  editor.setAgentBusy(true);
+  editor.setQueueMode(true);
+  typeKeys(editor, ["h", "e", "l", "l", "o"]);
+
+  editor.handleInput("\r");
+
+  expect(queued).toEqual(["hello"]);
+  expect(submitted).toEqual([]);
+  expect(editor.getText()).toBe("");
+});
+
+test("queue mode keeps the normal submit path while the agent is idle", () => {
+  const queued: string[] = [];
+  const { editor, submitted } = createSubmittingEditor({
+    onQueueMessage: (text) => queued.push(text),
+  });
+  editor.setQueueMode(true);
+  typeKeys(editor, ["h", "i"]);
+
+  editor.handleInput("\r");
+
+  expect(queued).toEqual([]);
+  expect(submitted).toEqual(["hi"]);
+});
+
+test("steering submit is untouched while queue mode is off", () => {
+  const queued: string[] = [];
+  const { editor, submitted } = createSubmittingEditor({
+    onQueueMessage: (text) => queued.push(text),
+  });
+  editor.setAgentBusy(true);
+  typeKeys(editor, ["o", "k"]);
+
+  editor.handleInput("\r");
+
+  expect(queued).toEqual([]);
+  expect(submitted).toEqual(["ok"]);
+});
+
+test("queue mode ignores empty submits and queues the trimmed prompt once", () => {
+  const queued: string[] = [];
+  const { editor } = createSubmittingEditor({ onQueueMessage: (text) => queued.push(text) });
+  editor.setAgentBusy(true);
+  editor.setQueueMode(true);
+
+  editor.handleInput("\r");
+  editor.setText("  second try  ");
+  editor.handleInput("\r");
+
+  expect(queued).toEqual(["second try"]);
+  expect(editor.getText()).toBe("");
+});
+
+test("queue mode status renders a QUEUE label without stealing status items", () => {
+  const queued: string[] = [];
+  const { editor } = createSubmittingEditor({ onQueueMessage: (text) => queued.push(text) });
+  expect(editor.render(40).join("\n")).not.toContain("QUEUE");
+
+  editor.setQueueMode(true);
+  expect(editor.render(40).join("\n")).toContain("QUEUE");
+
+  editor.setQueueMode(false);
+  expect(editor.render(40).join("\n")).not.toContain("QUEUE");
+  expect(queued).toEqual([]);
 });

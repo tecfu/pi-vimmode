@@ -51,6 +51,7 @@ import {
   READ_ONLY_POPUP_MIN_WIDTH,
   ReadOnlyPopupOverlayComponent,
 } from "./keybinding-discovery-overlay.ts";
+import { keyMatches } from "./modal/core.ts";
 import {
   canFastDelegateInsertInput,
   handleModalInput,
@@ -228,6 +229,8 @@ function clampToText(text: string, position: Position): Position {
 
 export type VimEditorOptions = {
   onShutdown?: () => void;
+  /** Sends text queued during a running turn (Pi followUp delivery). */
+  onQueueMessage?: (text: string) => void;
 };
 
 export type ResetTerminalCursorStyleOptions = {
@@ -243,9 +246,11 @@ export class VimEditor extends CustomEditor {
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private helpOverlay: OverlayHandle | undefined;
   private agentBusy = false;
+  private queueMode = false;
   private isMacroReplaying = false;
   private promptViewportOffset: number | undefined;
   private readonly onShutdown?: () => void;
+  private readonly onQueueMessage?: (text: string) => void;
 
   constructor(
     tui: TUI,
@@ -262,6 +267,7 @@ export class VimEditor extends CustomEditor {
     };
     this.overlayTheme = theme;
     this.onShutdown = vimOptions?.onShutdown;
+    this.onQueueMessage = vimOptions?.onQueueMessage;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -348,6 +354,17 @@ export class VimEditor extends CustomEditor {
     this.syncHardwareCursorVisibility(this.getCurrentCursorStyle());
   }
 
+  setQueueMode(active: boolean): void {
+    if (this.queueMode === active) return;
+    this.queueMode = active;
+    this.invalidate();
+    this.tui.requestRender();
+  }
+
+  getQueueMode(): boolean {
+    return this.queueMode;
+  }
+
   override handleInput(data: string): void {
     const keymap = keymapForOptions(this.options);
     if (
@@ -396,6 +413,7 @@ export class VimEditor extends CustomEditor {
       width,
       pending: pendingDisplay(this.modalState.pending) ?? modalPendingDisplay(this.modalState),
       recordingSlot: this.modalState.recordingSlot,
+      queueActive: this.queueMode,
       ui: uiForOptions(this.options),
     });
     const statusLine = fitStatusBorder(status.left, status.right, width, this.borderColor);
@@ -547,9 +565,33 @@ export class VimEditor extends CustomEditor {
   }
 
   private delegateDefaultInput(input: string): void {
+    if (this.shouldQueueSubmit(input)) {
+      this.submitQueuedMessage();
+      return;
+    }
     const before = this.redoSnapshot();
     super.handleInput(input);
     this.clearRedoAfterTextChange(before);
+  }
+
+  /** Enter while queue mode is active and the agent is streaming queues instead of steering. */
+  private shouldQueueSubmit(input: string): boolean {
+    return (
+      this.queueMode &&
+      this.agentBusy &&
+      this.onQueueMessage !== undefined &&
+      keyMatches(input, "enter")
+    );
+  }
+
+  private submitQueuedMessage(): void {
+    const text = this.getExpandedText().trim();
+    if (!text) return;
+    this.addToHistory(text);
+    this.setText("");
+    this.onQueueMessage?.(text);
+    this.invalidate();
+    this.tui.requestRender();
   }
 
   private applyEffect(effect: ModalEffect): void {

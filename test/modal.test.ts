@@ -6239,3 +6239,22 @@ test("EasyMotion leaves durable modal state unchanged", () => {
   expect(states[2]?.state.pendingEasymotion?.kind).toBe("highlight");
   expect(states[3]?.state.pendingEasymotion).toBeUndefined();
 });
+
+test("modal status exposes queue mode in the mode group and falls back without it", () => {
+  const withMode = modalStatus({ mode: "insert", text: "", cursor, width: 40, queueActive: true });
+  expect((withMode.left + withMode.right).trim()).toBe("INSERT QUEUE 1:1");
+
+  const withoutModeItems = modalStatus({
+    mode: "insert",
+    text: "",
+    cursor,
+    width: 40,
+    queueActive: true,
+    ui: resolveVimOptions({ piVimMode: { ui: { status: { items: ["cursorPosition"] } } } }).options
+      .ui,
+  });
+  expect((withoutModeItems.left + withoutModeItems.right).trim()).toBe("QUEUE 1:1");
+
+  const inactive = modalStatus({ mode: "insert", text: "", cursor, width: 40 });
+  expect((inactive.left + inactive.right).trim()).toBe("INSERT 1:1");
+});
