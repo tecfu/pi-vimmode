@@ -12,6 +12,7 @@ import {
   type VimConfigPlan,
   type VimRuntimeConfiguration,
 } from "../src/config.ts";
+import { PromptQueue, type PromptQueueFacade } from "../src/prompt-queue.ts";
 import { SEARCH_CURRENT_START, SEARCH_START } from "../src/render.ts";
 import { fitStatusBorder, VimEditor } from "../src/vim-editor.ts";
 
@@ -137,6 +138,7 @@ function createEditor(
     onShutdown?: () => void;
     onQueueMessage?: (text: string) => void;
     onQueueModeChange?: (active: boolean) => void;
+    queue?: PromptQueueFacade;
   },
 ) {
   const tuiState = createEditorTui(initialHardwareCursorVisible, terminalSize);
@@ -2850,4 +2852,90 @@ test("queue mode toggle follows the piVimMode keymap setting", () => {
   editor.handleInput("M");
   expect(editor.getQueueMode()).toBe(true);
   expect(editor.render(40).join("\n")).toContain("QUEUE");
+});
+
+function queueManagerEditor(vimOptions: { queue?: PromptQueueFacade } = {}) {
+  const resolved = resolveVimOptions({
+    piVimMode: { keymap: { commands: { showQueue: ["sq"] } } },
+  });
+  expect(resolved.warnings).toEqual([]);
+
+  return createEditor(
+    { ...resolved.options, startMode: "normal" },
+    { warnings: [] },
+    false,
+    {},
+    vimOptions,
+  );
+}
+
+function managerFacade(queue: PromptQueue): PromptQueueFacade {
+  return queue.facade(() => true);
+}
+
+test("the queue manager binding is active only while queue mode is on", () => {
+  const queue = new PromptQueue();
+  queue.enqueue("first");
+  const { editor, overlays } = queueManagerEditor({ queue: managerFacade(queue) });
+
+  // Queue mode off: "s" substitutes as always, and "sq" is not a command.
+  editor.setText("abcd");
+  editor.handleInput("0");
+  editor.handleInput("s");
+  expect(editor.getVimMode()).toBe("insert");
+  expect(editor.getText()).toBe("bcd");
+  expect(overlays).toHaveLength(0);
+
+  // Queue mode on: the same strokes open the manager instead.
+  editor.handleInput("\x1b");
+  editor.setQueueMode(true);
+  editor.setText("abcd");
+  editor.handleInput("0");
+  editor.handleInput("s");
+  expect(editor.getVimMode()).toBe("normal");
+  expect(editor.getText()).toBe("abcd");
+  editor.handleInput("q");
+
+  expect(overlays).toHaveLength(1);
+  expect(overlays[0]!.component.render(80).join("")).toContain("first");
+});
+
+test("turning queue mode off hides the prompt manager", () => {
+  const queue = new PromptQueue();
+  queue.enqueue("first");
+  const { editor, overlays } = queueManagerEditor({ queue: managerFacade(queue) });
+
+  editor.setQueueMode(true);
+  editor.handleInput("s");
+  editor.handleInput("q");
+  expect(overlays).toHaveLength(1);
+  expect(overlays[0]!.hidden).toBe(false);
+
+  editor.setQueueMode(false);
+  expect(overlays[0]!.hidden).toBe(true);
+});
+
+test("the queue manager reports the number of held prompts", () => {
+  const queue = new PromptQueue();
+  queue.enqueue("first");
+  queue.enqueue("second");
+  const { editor } = queueManagerEditor({ queue: managerFacade(queue) });
+
+  editor.setQueueMode(true);
+  expect(editor.render(60).join("")).toContain("QUEUE 2");
+
+  queue.takeNext();
+  editor.handleInput("i");
+  expect(editor.render(60).join("")).toContain("QUEUE 1");
+});
+
+test("without a queue facade the manager says so instead of throwing", () => {
+  const { editor, overlays } = queueManagerEditor();
+
+  editor.setQueueMode(true);
+  editor.handleInput("s");
+  editor.handleInput("q");
+
+  expect(overlays).toHaveLength(0);
+  expect(editor.render(60).join("")).toContain("Queue manager");
 });

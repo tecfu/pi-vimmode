@@ -98,7 +98,8 @@ export type VimCommandAction =
   | "showKeybindings"
   | "reselectVisual"
   | "easymotion"
-  | "toggleQueueMode";
+  | "toggleQueueMode"
+  | "showQueue";
 
 export type VimTextObjectKind = "inner" | "around";
 

@@ -323,6 +323,11 @@ test("parses prompt transform commands with ranges and arguments", () => {
 });
 
 test("parses exact changelog popup command", () => {
+  expect(parseExCommand("queue", context)).toEqual({ type: "queueManager", command: "queue" });
+  expect(parseExCommand("queue now", context)).toEqual({
+    type: "error",
+    message: "Unexpected Ex command arguments",
+  });
   expect(parseExCommand("changelog", context)).toEqual({
     type: "changelog",
     command: "changelog",
@@ -737,7 +742,7 @@ test("returns supported built-in command names for empty input", () => {
 test("filters suggestions to exact command names by prefix", () => {
   expect(suggestExCommands("ma", context)).toEqual(["mapcheck"]);
   expect(suggestExCommands("s", context)).toEqual(["s", "substitute"]);
-  expect(suggestExCommands("qu", context)).toEqual(["quit", "quote"]);
+  expect(suggestExCommands("qu", context)).toEqual(["queue", "quit", "quote"]);
 });
 
 test("suggests commands after a valid range prefix", () => {
@@ -761,7 +766,7 @@ test("returns empty suggestions for invalid input and unsupported commandless ra
 });
 
 test("includes enabled transform command names", () => {
-  expect(suggestExCommands("qu", transformsContext())).toEqual(["quit", "quote"]);
+  expect(suggestExCommands("qu", transformsContext())).toEqual(["queue", "quit", "quote"]);
   expect(suggestExCommands("", transformsContext())).toEqual(
     expect.arrayContaining([
       "quote",
@@ -805,13 +810,13 @@ test("omits transform command names when action is disabled", () => {
     },
   });
 
-  expect(suggestExCommands("qu", ctx)).toEqual(["quit"]);
+  expect(suggestExCommands("qu", ctx)).toEqual(["queue", "quit"]);
   expect(suggestExCommands("", ctx)).toEqual(expect.not.arrayContaining(["quote"]));
 });
 
 test("omits all transform commands when transform feature is disabled", () => {
   const ctx = transformsContext({ enabled: false });
 
-  expect(suggestExCommands("qu", ctx)).toEqual(["quit"]);
+  expect(suggestExCommands("qu", ctx)).toEqual(["queue", "quit"]);
   expect(suggestExCommands("", ctx)).toEqual(expect.not.arrayContaining(["quote"]));
 });

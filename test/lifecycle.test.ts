@@ -18,6 +18,7 @@ type HookName =
   | "resources_discover"
   | "agent_start"
   | "agent_end"
+  | "agent_settled"
   | "session_shutdown";
 type Hook = (event: unknown, ctx: FakeContext) => void;
 type Command = {
@@ -253,6 +254,7 @@ test("registers Pi lifecycle hooks", () => {
 
   expect([...hooks.keys()].sort()).toEqual([
     "agent_end",
+    "agent_settled",
     "agent_start",
     "resources_discover",
     "session_shutdown",
@@ -955,7 +957,7 @@ test("vimmode queue subcommand toggles queue mode on tracked and new editors", a
   ]);
 });
 
-test("queue mode submits reach Pi as follow-up messages", async () => {
+test("queue mode holds submits and delivers them one per settle", async () => {
   const { hooks, commands, realEditors, queuedMessages } = createLifecycleHarness(undefined, true);
   const ctx = createContext("/repo");
   hooks.get("session_start")?.({}, ctx);
@@ -968,8 +970,45 @@ test("queue mode submits reach Pi as follow-up messages", async () => {
   for (const key of ["n", "e", "x", "t"]) editor.handleInput(key);
   editor.handleInput("\r");
 
-  expect(queuedMessages).toEqual([{ content: "next", options: { deliverAs: "followUp" } }]);
+  // Held in pi-vimmode's own queue: Pi sees nothing until the turn settles,
+  // which is what lets the manager delete or reorder a prompt first.
+  expect(queuedMessages).toEqual([]);
   expect(editor.getText()).toBe("");
+  for (const key of ["l", "a", "t", "e", "r"]) editor.handleInput(key);
+  editor.handleInput("\r");
+  expect(editor.render(60).join("")).toContain("QUEUE 2");
+
+  hooks.get("agent_end")?.({}, ctx);
+  hooks.get("agent_settled")?.({}, ctx);
+  expect(queuedMessages).toEqual([{ content: "next", options: { deliverAs: "followUp" } }]);
+
+  hooks.get("agent_start")?.({}, ctx);
+  hooks.get("agent_end")?.({}, ctx);
+  hooks.get("agent_settled")?.({}, ctx);
+  expect(queuedMessages.map((entry) => entry.content)).toEqual(["next", "later"]);
+});
+
+test("queued prompts deleted before delivery are never sent to Pi", async () => {
+  const { hooks, commands, realEditors, queuedMessages } = createLifecycleHarness(undefined, true);
+  const ctx = createContext("/repo");
+  hooks.get("session_start")?.({}, ctx);
+  ctx.ui.setCalls[0]!({}, {}, {});
+  hooks.get("agent_start")?.({}, ctx);
+  await commands.get("vimmode")?.handler("queue on", ctx);
+
+  const editor = realEditors[0]!;
+  for (const key of ["o", "n", "e"]) editor.handleInput(key);
+  editor.handleInput("\r");
+  for (const key of ["t", "w", "o"]) editor.handleInput(key);
+  editor.handleInput("\r");
+
+  const queue = editor.getPromptQueue();
+  expect(queue?.list().map((item) => item.text)).toEqual(["one", "two"]);
+  expect(queue?.remove(1)).toBe(true);
+
+  hooks.get("agent_end")?.({}, ctx);
+  hooks.get("agent_settled")?.({}, ctx);
+  expect(queuedMessages.map((entry) => entry.content)).toEqual(["one"]);
 });
 
 test("gz in normal mode toggles queue mode for tracked and later editors", async () => {

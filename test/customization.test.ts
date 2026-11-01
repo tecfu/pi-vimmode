@@ -27,9 +27,10 @@ describe("vim customization helpers", () => {
   });
 
   test("formats keymap entries from resolved bindings", () => {
-    expect(keymapMessage(keymap)).toBe("keymap: 92 entries; :keymap <action>");
+    expect(keymapMessage(keymap)).toBe("keymap: 93 entries; :keymap <action>");
     expect(keymapMessage(keymap, "redo")).toContain("command.redo ctrl+r");
     expect(keymapMessage(keymap, "toggleQueueMode")).toContain("command.toggleQueueMode gz");
+    expect(keymapMessage(keymap, "showQueue")).toContain("command.showQueue gj");
     expect(keymapMessage(keymap, "halfPageDown")).toContain("motion.halfPageDown ctrl+d");
     expect(keymapMessage(keymap, "missing-action")).toBe("keymap: no match for missing-action");
   });

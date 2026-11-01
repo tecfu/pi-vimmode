@@ -62,7 +62,7 @@ Startup mode is `insert` by default. Configure `piVimMode.startMode` to start ne
 
 Queue mode changes what `Enter` does while Pi is running a turn. Pi's default is to steer: the submitted text interrupts the running turn at the next tool boundary. In queue mode the submitted text joins Pi's follow-up queue instead, and Pi sends it as a normal user turn after the current turn finishes.
 
-- Toggle it at runtime with `/vimmode queue on`, `/vimmode queue off`, `/vimmode queue toggle`, or `/vimmode queue status`. A bare `/vimmode queue` toggles.
+- Toggle it at runtime with `/vimmode queue on`, `/vimmode queue off`, `/vimmode queue toggle`, or `/vimmode queue status`. A bare `/vimmode queue` toggles. `/vimmode queue status` reports how many prompts are held.
 - `gz` in normal mode toggles queue mode without leaving the prompt. That key is the bindable `command.toggleQueueMode` action (default `gz`) and follows normal keymap validation and scoped mappings like any other semantic command; lowercase `q` stays the macro-record key, so `q{a-z}`, `q`, and `@{a-z}` are unchanged.
 - Rebind the toggle like any other semantic normal-mode command: `{ "piVimMode": { "keymap": { "commands": { "toggleQueueMode": ["M"] } } } }` in settings, or `vim.keymap.set("n", "M", vim.action.command.toggleQueueMode())` in trusted JavaScript. `:keybindings toggleQueueMode` shows the effective key.
 - Pick a key the finite grammar does not already own. Commands and motions share one key namespace, and a command binding wins, so binding `toggleQueueMode` to a motion key silently replaces that motion: `e` is word-end, so `toggleQueueMode: ["e"]` makes `e` toggle queue mode and leaves `de`, `ce`, `ye`, and `3e` invalid. The default is `gz` rather than a bare letter because every lowercase letter is already a motion or command and `z` is this extension's documented free prefix (`zz`, `zq`, `zgw` are the example mappings in the settings guide), so `z` alone stays available for your own mappings.
@@ -71,6 +71,18 @@ Queue mode changes what `Enter` does while Pi is running a turn. Pi's default is
 - Submission keeps the trimmed prompt text, records it in prompt history, and clears the editor exactly like a normal submit.
 - When Pi is idle, `Enter` keeps its normal submit path, so queue mode never delays the first message of a turn and never queues twice.
 - Queue mode covers plain `Enter` submission. `Alt+Enter` (`app.message.followUp`) stays available and behaves the same way whether or not queue mode is on.
+
+### Managing queued prompts
+
+Queue mode holds submitted prompts in pi-vimmode's own list rather than handing them straight to Pi, so they can be inspected and edited before anything is sent. Pi's extension API cannot read, clear, or reorder its follow-up queue, so owning the list is what makes the manager possible: prompts leave one at a time, each sent as a follow-up when the running turn settles.
+
+- `:queue` opens the manager from Ex mode, in any mode, whether or not queue mode is on.
+- `gj` in normal mode opens it too (the bindable `command.showQueue` action). Those bindings exist **only while queue mode is on**: with the mode off, `g` and `s` behave exactly as they always did. Binding a queue-only prefix such as `sq` therefore cannot quietly disable the `s` operator for the whole session.
+- In the overlay: `j`/`k` (or arrows) move the selection, `J`/`K` reorder the selected prompt down or up, `d` deletes it, `u` restores the most recently deleted prompt to its old position, `Enter` sends the selected prompt to Pi immediately, and `q`, `Esc`, or `Ctrl+C` closes the manager.
+- The status border counts what is waiting: `QUEUE` when queue mode is on with nothing held, `QUEUE 3` when three prompts are queued.
+- Closing the overlay leaves the queue intact; the next settle delivers the head of the list. Deleting a prompt before its turn means Pi never sees it.
+- A settle delivers one prompt, matching Pi's default `followUpMode: "one-at-a-time"`. Reopening the manager while a delivery is in flight shows the remaining list.
+
 - Prompt templates and extension commands are not expanded for queued text. The text reaches Pi as a user message with the follow-up delivery mode, which is the same contract Pi uses for queued follow-ups.
 
 ## Quick reference
@@ -84,7 +96,7 @@ pi-vimmode has a finite prompt-local surface. This quickref classifies what is s
 | Prompt transforms                    | `:quote`, `:fence ts`, `:reflow 72`                                           | Finite linewise prompt transforms controlled by `piVimMode.promptTransforms.*`.                     |
 | Keybindable prompt transform actions | `prompt.transform.reflow`, `prompt.transform.quote`                           | Canonical `prompt.transform.*` IDs accepted by `piVimMode.keymap.actions`.                          |
 | Customization diagnostics            | `:vimdoctor`, `:actions`, `:keybindings`, `:keymap`, `:mapcheck`              | Read-only metadata/help actions shown in popup output; searchable as `vimmode.*`, not bindable.     |
-| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:vimmode inspect`                         | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
+| Runtime help/inspectability          | `:help`, `:features`, `:messages`, `:queue`, `:vimmode inspect`               | Read-only source-backed help and prompt-local state/message summaries shown in popup output.        |
 | Pi shortcut compatibility            | `Enter`, `Ctrl-C`, `Ctrl-G`, `Ctrl-P`, `Ctrl-v`, `Alt-v`, `Ctrl-Alt-v`, `Tab` | Pi-owned or protected shortcuts; use `:mapcheck <key>` to inspect ownership.                        |
 | Escape aliases                       | `<D-j>`, `<C-j>` via `piVimMode.keymap.escape`                                | Opt-in key aliases for leaving insert, visual, or pending Ex command states; not full Vim mappings. |
 
@@ -566,6 +578,7 @@ Supported commands:
 :help search
 :features nohlsearch
 :messages
+:queue
 ```
 
 Supported ranges:
@@ -762,6 +775,7 @@ Examples:
 :features ctrl+p  " protected Pi shortcut ownership
 :vimmode inspect  " current prompt-local editor state summary
 :messages         " retained recent runtime message summary
+:queue            " queued prompt manager: view, delete, reorder, send now
 ```
 
 `:actions` remains action-focused, `:keymap` remains binding-focused, `:mapcheck` explains one key or sequence, and `:vimdoctor` reports retained settings warnings behind `vim ⚠`. Use `:features` for broader feature/limit discovery. Diagnostic/help metadata IDs use the `vimmode.*` namespace for search and docs classification only; they are metadata-only, not bindable, and do not create a plugin action API.

@@ -18,6 +18,7 @@ import type {
   ModalOptions,
   ModalState,
 } from "./modal/types.ts";
+import type { PromptQueueFacade } from "./prompt-queue.ts";
 import type { ReadOnlyPopup } from "./read-only-popup.ts";
 import type {
   CursorStyle,
@@ -38,6 +39,7 @@ import {
   DEFAULT_VIM_OPTIONS,
   escapeAliasesForScope,
   keymapForOptions,
+  withoutQueueModeBindings,
   promptTransformsForOptions,
   searchForOptions,
   uiForOptions,
@@ -60,6 +62,7 @@ import {
 import { appendMessageHistory } from "./modal/inspect.ts";
 import { createModalState, resetTransientState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
+import { QueueManagerOverlayComponent } from "./queue-manager-overlay.ts";
 import {
   cursorShapeEscape,
   renderPromptEditor,
@@ -233,6 +236,8 @@ export type VimEditorOptions = {
   onQueueModeChange?: (active: boolean) => void;
   /** Sends text queued during a running turn (Pi followUp delivery). */
   onQueueMessage?: (text: string) => void;
+  /** Live view of the prompts queue mode holds, for the manager overlay. */
+  queue?: PromptQueueFacade;
 };
 
 export type ResetTerminalCursorStyleOptions = {
@@ -247,6 +252,10 @@ export class VimEditor extends CustomEditor {
   private readonly originalHardwareCursorVisible: boolean | undefined;
   private lastTerminalCursorStyle: CursorStyle | undefined;
   private helpOverlay: OverlayHandle | undefined;
+  private queueOverlay: OverlayHandle | undefined;
+  private inactivePlanCache:
+    | { configuration: VimRuntimeConfiguration; plan: VimConfigPlan }
+    | undefined;
   private agentBusy = false;
   private queueMode = false;
   private isMacroReplaying = false;
@@ -254,6 +263,7 @@ export class VimEditor extends CustomEditor {
   private readonly onShutdown?: () => void;
   private readonly onQueueModeChange?: (active: boolean) => void;
   private readonly onQueueMessage?: (text: string) => void;
+  private readonly queue?: PromptQueueFacade;
 
   constructor(
     tui: TUI,
@@ -272,6 +282,7 @@ export class VimEditor extends CustomEditor {
     this.onShutdown = vimOptions?.onShutdown;
     this.onQueueModeChange = vimOptions?.onQueueModeChange;
     this.onQueueMessage = vimOptions?.onQueueMessage;
+    this.queue = vimOptions?.queue;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -340,6 +351,8 @@ export class VimEditor extends CustomEditor {
     this.restoreCursor(cursor);
     this.helpOverlay?.hide();
     this.helpOverlay = undefined;
+    this.queueOverlay?.hide();
+    this.queueOverlay = undefined;
     this.applyTerminalCursorStyle(this.getCurrentCursorStyle());
     this.invalidate();
     this.tui.requestRender();
@@ -361,12 +374,19 @@ export class VimEditor extends CustomEditor {
   setQueueMode(active: boolean): void {
     if (this.queueMode === active) return;
     this.queueMode = active;
+    this.queueOverlay?.hide();
+    this.queueOverlay = undefined;
     this.invalidate();
     this.tui.requestRender();
   }
 
   getQueueMode(): boolean {
     return this.queueMode;
+  }
+
+  /** View of the prompts queue mode holds, for tests and the manager overlay. */
+  getPromptQueue(): PromptQueueFacade | undefined {
+    return this.queue;
   }
 
   /** Keyboard toggle: flip this editor, then let the extension sync every editor. */
@@ -392,7 +412,7 @@ export class VimEditor extends CustomEditor {
     const update = handleModalInput(
       this.modalState,
       this.snapshot(),
-      this.configuration.plan,
+      this.activePlan(),
       data,
       this.diagnostics,
     );
@@ -425,6 +445,7 @@ export class VimEditor extends CustomEditor {
       pending: pendingDisplay(this.modalState.pending) ?? modalPendingDisplay(this.modalState),
       recordingSlot: this.modalState.recordingSlot,
       queueActive: this.queueMode,
+      queueCount: this.queue?.size() ?? 0,
       ui: uiForOptions(this.options),
     });
     const statusLine = fitStatusBorder(status.left, status.right, width, this.borderColor);
@@ -638,6 +659,9 @@ export class VimEditor extends CustomEditor {
       case "invalidate":
         this.invalidate();
         return;
+      case "openQueueManager":
+        this.openQueueManager();
+        return;
       case "toggleQueueMode":
         this.toggleQueueModeFromKey();
         return;
@@ -695,6 +719,59 @@ export class VimEditor extends CustomEditor {
       exMessage: message,
       messageHistory: appendMessageHistory(this.modalState.messageHistory, message),
     };
+    this.invalidate();
+  }
+
+  /**
+   * Queue-mode keymap gating: `command.showQueue` (default `gq`) is compiled in
+   * only while queue mode is on, so a queue-only prefix such as `sq` cannot
+   * shadow the `s` operator when the mode is off. See withoutQueueModeBindings.
+   */
+  private activePlan(): VimConfigPlan {
+    if (this.queueMode) return this.configuration.plan;
+    const configuration = this.configuration;
+    if (this.inactivePlanCache?.configuration === configuration) return this.inactivePlanCache.plan;
+    const plan = withoutQueueModeBindings(configuration.plan);
+    this.inactivePlanCache = { configuration, plan };
+    return plan;
+  }
+
+  private openQueueManager(): void {
+    this.queueOverlay?.hide();
+    this.queueOverlay = undefined;
+    const queue = this.queue;
+    const termWidth = this.terminalColumns();
+    const termHeight = this.terminalRows();
+    if (!queue || !canShowReadOnlyPopup(termWidth, termHeight)) {
+      const { helpPopup: _helpPopup, ...state } = this.modalState;
+      this.modalState = {
+        ...state,
+        exMessage: {
+          kind: "info",
+          text: queue
+            ? "Queue manager unavailable: terminal too small"
+            : "Queue manager unavailable",
+        },
+      };
+      this.invalidate();
+      return;
+    }
+
+    let handle: OverlayHandle | undefined;
+    const component = new QueueManagerOverlayComponent(this.tui, queue, this.overlayTheme, () => {
+      handle?.hide();
+      if (this.queueOverlay === handle) this.queueOverlay = undefined;
+      this.tui.requestRender();
+    });
+    handle = this.tui.showOverlay(component, {
+      anchor: "center",
+      width: "90%",
+      minWidth: READ_ONLY_POPUP_MIN_WIDTH,
+      maxHeight: "90%",
+      margin: 2,
+      visible: (width, height) => canShowReadOnlyPopup(width, height),
+    });
+    this.queueOverlay = handle;
     this.invalidate();
   }
 

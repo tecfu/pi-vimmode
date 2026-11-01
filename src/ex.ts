@@ -111,6 +111,7 @@ export type ExParseResult =
   | ParsedExInspectCommand
   | ParsedExChangelogCommand
   | { type: "nohlsearch"; command: "noh" | "nohlsearch" }
+  | { type: "queueManager"; command: "queue" }
   | ParsedExQuitCommand
   | { type: "lineJump"; range: LineRange; line: number }
   | { type: "empty" }
@@ -150,6 +151,7 @@ type ParsedCommandName =
   | "changelog"
   | "noh"
   | "nohlsearch"
+  | "queue"
   | "q"
   | "quit";
 
@@ -168,6 +170,7 @@ type ParsedCommandType =
   | "inspect"
   | "changelog"
   | "nohlsearch"
+  | "queueManager"
   | "quit";
 
 type ParsedCommand = {
@@ -233,6 +236,7 @@ const COMMAND_TYPES: Record<ParsedCommandName, ParsedCommandType> = {
   changelog: "changelog",
   noh: "nohlsearch",
   nohlsearch: "nohlsearch",
+  queue: "queueManager",
   q: "quit",
   quit: "quit",
 };
@@ -285,6 +289,7 @@ function parseCommand(
     "changelog",
     "noh",
     "nohlsearch",
+    "queue",
     "q",
     "quit",
   ]);
@@ -565,6 +570,7 @@ function parseParsedExCommand(
   if (trailing) return trailing;
   if (command.command.type === "nohlsearch")
     return { type: "nohlsearch", command: command.command.name as "noh" | "nohlsearch" };
+  if (command.command.type === "queueManager") return { type: "queueManager", command: "queue" };
   if (command.command.type === "quit")
     return { type: "quit", command: command.command.name as "q" | "quit", range, rangeExplicit };
   return { type: "join", command: command.command.name, range, rangeExplicit };
@@ -617,6 +623,7 @@ const CANDIDATE_NAMES_BY_COMMAND_TYPE: Record<string, string[]> = {
   move: ["m", "move"],
   join: ["j", "join"],
   nohlsearch: ["noh", "nohlsearch"],
+  queueManager: ["queue"],
   quit: ["q", "quit"],
   repeatSubstitute: ["&", "&&"],
   lineJump: [] as string[],
