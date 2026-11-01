@@ -3,6 +3,7 @@ import {
   truncateToWidth,
   visibleWidth,
   type Component,
+  type KeyId,
   type TUI,
 } from "@earendil-works/pi-tui";
 
@@ -193,7 +194,7 @@ const QUEUE_MANAGER_LITERAL_KEYS: Record<string, QueueManagerAction> = {
   "\r": "send",
 };
 
-const QUEUE_MANAGER_NAMED_KEYS: ReadonlyArray<readonly [string, QueueManagerAction]> = [
+const QUEUE_MANAGER_NAMED_KEYS: ReadonlyArray<readonly [KeyId, QueueManagerAction]> = [
   ["down", "next"],
   ["up", "previous"],
   ["enter", "send"],
