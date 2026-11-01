@@ -10,6 +10,7 @@ import {
   type VimConfigPaths,
   type VimRuntimeConfiguration,
 } from "./config.ts";
+import { PromptQueue, type PromptQueueFacade, type QueuedPrompt } from "./prompt-queue.ts";
 import { type ResetTerminalCursorStyleOptions, VimEditor } from "./vim-editor.ts";
 
 type VimEditorFactory = (
@@ -35,6 +36,7 @@ type CreateEditor = (
     onShutdown?: () => void;
     onQueueMessage?: (text: string) => void;
     onQueueModeChange?: (active: boolean) => void;
+    queue?: PromptQueueFacade;
   },
 ) => TrackedEditor;
 type Schedule = (callback: () => void) => void;
@@ -144,6 +146,10 @@ type EditorState = {
   currentShutdown?: () => void;
   queueMessage?: (text: string) => void;
   queueModeChange?: (active: boolean) => void;
+  /** Prompts entered while queue mode is on; Pi only ever sees the head. */
+  queue: PromptQueue;
+  queueFacade?: PromptQueueFacade;
+  deliverPrompt?: (prompt: QueuedPrompt) => boolean;
   notify?: (message: string, level?: "info" | "warning" | "error") => void;
   enabled: boolean;
   agentBusy: boolean;
@@ -222,6 +228,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
     enabled: true,
     agentBusy: false,
     queueMode: false,
+    queue: new PromptQueue(),
     hasInstalledFactory: false,
     installGeneration: 0,
   };
@@ -230,6 +237,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
       onShutdown: state.currentShutdown,
       onQueueMessage: state.queueMessage,
       onQueueModeChange: state.queueModeChange,
+      queue: state.queueFacade,
     });
     state.editors.add(editor);
     if (state.agentBusy) editor.setAgentBusy(true);
@@ -315,6 +323,30 @@ const QUEUE_MODE_ENABLED_MESSAGE =
   "pi-vimmode queue mode enabled: submits during a running turn are queued as follow-ups";
 const QUEUE_MODE_DISABLED_MESSAGE = "pi-vimmode queue mode disabled";
 
+function deliverPromptAsFollowUp(pi: ExtensionAPI, prompt: QueuedPrompt): boolean {
+  try {
+    pi.sendUserMessage(prompt.text, { deliverAs: "followUp" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Hand the oldest queued prompt to Pi; the rest wait for later settles. */
+function deliverQueueHead(state: EditorState): void {
+  if (state.queue.size === 0) return;
+  state.queueFacade?.deliverNow(0);
+}
+
+/**
+ * `agent_settled` exists in Pi's runtime API but not in the extension typings
+ * this repo pins, so the event name is widened here rather than everywhere.
+ */
+function onAgentSettled(pi: ExtensionAPI, handler: () => void): void {
+  const register = pi.on as unknown as (event: string, handler: () => void) => () => void;
+  register("agent_settled", handler);
+}
+
 function applyQueueMode(
   state: EditorState,
   enable: boolean,
@@ -331,7 +363,12 @@ function handleQueueCommand(subaction: string, state: EditorState, ctx: Extensio
     return;
   }
   if (subaction === "status") {
-    ctx.ui.notify(`pi-vimmode queue mode ${state.queueMode ? "enabled" : "disabled"}`, "info");
+    const pending = state.queue.size;
+    ctx.ui.notify(
+      `pi-vimmode queue mode ${state.queueMode ? "enabled" : "disabled"}` +
+        (pending > 0 ? ` (${pending} queued)` : ""),
+      "info",
+    );
     return;
   }
   const enable = subaction === "on" || (subaction === "toggle" && !state.queueMode);
@@ -350,10 +387,20 @@ export function registerVimLifecycle(
   dependencies: VimLifecycleDependencies = {},
 ): void {
   const state = createEditorState(dependencies);
-  state.queueMessage = (text) => pi.sendUserMessage(text, { deliverAs: "followUp" });
+  state.queueFacade = state.queue.facade((prompt) => state.deliverPrompt?.(prompt) ?? false);
+  state.deliverPrompt = (prompt) => deliverPromptAsFollowUp(pi, prompt);
+  // Queue mode owns the list: submits land here, and one prompt per settle goes
+  // to Pi as a follow-up, so the manager can delete or reorder before delivery.
+  state.queueMessage = (text) => {
+    state.queue.enqueue(text);
+    if (!state.agentBusy) deliverQueueHead(state);
+  };
   state.queueModeChange = (active) => applyQueueMode(state, active, state.notify);
   registerVimCommand(pi, state);
-  pi.on("session_start", (_event, ctx) => installEditorSoon(state, ctx));
+  pi.on("session_start", (_event, ctx) => {
+    state.queue.clear();
+    installEditorSoon(state, ctx);
+  });
   pi.on("resources_discover", (_event, ctx) => installEditorSoon(state, ctx));
   pi.on("agent_start", () => {
     state.agentBusy = true;
@@ -363,6 +410,9 @@ export function registerVimLifecycle(
     state.agentBusy = false;
     for (const editor of state.editors) editor.setAgentBusy(false);
     observeInstall(installEditor(state, ctx), ctx);
+  });
+  onAgentSettled(pi, () => {
+    if (state.enabled) deliverQueueHead(state);
   });
   pi.on("session_shutdown", (event) => {
     state.agentBusy = false;

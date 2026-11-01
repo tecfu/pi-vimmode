@@ -3632,6 +3632,73 @@ export function keymapForOptions(options: ResolvedVimEditorOptions): ResolvedVim
   return options.keymap ?? DEFAULT_VIM_KEYMAP;
 }
 
+/**
+ * Strip the queue-mode-only command bindings from a plan.
+ *
+ * `command.showQueue` opens the queued-prompt manager, and users bind it to
+ * sequences that start with an otherwise-live key (`sq` starts with `s`, the
+ * substitute operator). Compiling that sequence only while queue mode is on
+ * keeps `s` working when the mode is off, which is why the binding is dropped
+ * from the inactive keymap instead of being resolved there.
+ */
+const QUEUE_MANAGER_ACTION_ID = "command.showQueue";
+
+/**
+ * The keymap variant used while queue mode is OFF: `command.showQueue` is
+ * absent, so a queue-only prefix such as `sq` cannot hold the `s` operator
+ * hostage. Two things have to be undone, because binding a command to a key
+ * that extends another command's key has two effects:
+ *
+ * - resolution: the sequence itself (`sq`, or the `gq` default) must not
+ *   resolve any more, so it is removed from the command keys and the scoped
+ *   (JavaScript) bindings, and the plan is recompiled from the patched options;
+ * - resolve time: a command whose own default key is a strict prefix of the
+ *   new sequence loses that key (binding `sq` leaves `substituteChar` bound to
+ *   nothing at all), so those suppressed defaults are restored here.
+ *
+ * Recompiling rather than editing the compiled plan matters: the plan carries
+ * resolution caches attached to the keymap object, and a shallow copy of it
+ * silently unbinds unrelated commands.
+ */
+export function withoutQueueModeBindings(plan: VimConfigPlan): VimConfigPlan {
+  const keymap = plan.options.keymap;
+  if (!keymap) return plan;
+  const queueKeys = queueManagerKeys(keymap);
+  if (queueKeys.length === 0) return plan;
+
+  const options = cloneResolvedVimOptions(plan.options);
+  const patched = options.keymap ?? DEFAULT_VIM_KEYMAP;
+  patched.commands.showQueue = [];
+  patched.scoped = patched.scoped.filter((binding) => binding.actionId !== QUEUE_MANAGER_ACTION_ID);
+  restorePrefixSuppressedDefaults(patched, queueKeys);
+  return createVimConfigPlan(options, [...plan.diagnostics.warnings]);
+}
+
+function queueManagerKeys(keymap: ResolvedVimKeymap): string[] {
+  return [
+    ...(keymap.commands.showQueue ?? []),
+    ...keymap.scoped
+      .filter((binding) => binding.actionId === QUEUE_MANAGER_ACTION_ID)
+      .map((binding) => binding.key),
+  ];
+}
+
+/** Undo the resolve-time damage of the queue keys removed above. */
+function restorePrefixSuppressedDefaults(keymap: ResolvedVimKeymap, removedKeys: string[]): void {
+  for (const name of Object.keys(KEYMAP_COMMAND_DESCRIPTORS) as VimCommandAction[]) {
+    if (name === "showQueue") continue;
+    if ((keymap.commands[name]?.length ?? 0) > 0) continue;
+    // The shipped default is the only thing that can have been suppressed: a key
+    // the user unbound by hand is left alone unless it is a strict prefix of the
+    // queue sequence, in which case the queue binding is what made it unreachable.
+    const defaults = DEFAULT_VIM_KEYMAP.commands[name] ?? [];
+    const suppressed = defaults.some((key) =>
+      removedKeys.some((bound) => bound !== key && bound.startsWith(key)),
+    );
+    if (suppressed) keymap.commands[name] = [...defaults];
+  }
+}
+
 export function escapeAliasesForScope(
   keymap: ResolvedVimKeymap,
   scope: Extract<

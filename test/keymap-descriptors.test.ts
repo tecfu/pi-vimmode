@@ -103,6 +103,7 @@ const expectedCommands = [
   "reselectVisual",
   "easymotion",
   "toggleQueueMode",
+  "showQueue",
 ];
 const expectedTextObjectTargets = [
   "word",

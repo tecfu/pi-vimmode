@@ -658,6 +658,8 @@ function applyCommandGroup4(
       return reselectVisualUpdate(nextState, snapshot, options);
     case "toggleQueueMode":
       return withEffects(nextState, [{ type: "toggleQueueMode" }, { type: "invalidate" }]);
+    case "showQueue":
+      return withEffects(nextState, [{ type: "openQueueManager" }, { type: "invalidate" }]);
     case "showKeybindings": {
       const popup = keybindingsPopup(options);
       return withEffects({ ...nextState, helpPopup: popup }, [

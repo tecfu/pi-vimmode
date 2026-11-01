@@ -290,7 +290,7 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 <a id="config-property-search-currentHighlightColor"></a>
 
 - Accepted shape: `string`
-- Built-in default: `"\\u001b[30;43m"`
+- Built-in default: `"\u001b[30;43m"`
 - Assignment semantics: replaces value
 - JSON crosswalk: `piVimMode.search.currentHighlightColor`
 - Compatibility aliases: none
@@ -320,7 +320,7 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 <a id="config-property-search-highlightColor"></a>
 
 - Accepted shape: `string`
-- Built-in default: `"\\u001b[43m"`
+- Built-in default: `"\u001b[43m"`
 - Assignment semantics: replaces value
 - JSON crosswalk: `piVimMode.search.highlightColor`
 - Compatibility aliases: none
@@ -795,6 +795,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Supported mapping scopes: `normal`
 - Arguments: none
 - Default keys: none
+- Compatibility aliases: none
+
+#### `command.showQueue`
+
+<a id="config-action-command-showQueue"></a>
+
+- Canonical factory: `vim.action.command.showQueue()`
+- Supported mapping scopes: `normal`
+- Arguments: none
+- Default keys: `gj`
 - Compatibility aliases: none
 
 #### `command.startExCommand`

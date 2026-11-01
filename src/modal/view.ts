@@ -23,6 +23,8 @@ export type ModalStatusInput = ModalVisualStatusInput & {
   pending?: string;
   recordingSlot?: string;
   queueActive?: boolean;
+  /** Pending queued prompts, shown as `QUEUE n` while queue mode is on. */
+  queueCount?: number;
 };
 
 export type ModalStatus = {
@@ -34,6 +36,10 @@ type AnchoredVisualStatusInput = ModalVisualStatusInput & { visualAnchor: Positi
 
 /** Shown in the status row while queue mode redirects submits to Pi's follow-up queue. */
 export const QUEUE_MODE_STATUS_LABEL = "QUEUE";
+
+function queueStatusLabel(count?: number): string {
+  return count && count > 0 ? `${QUEUE_MODE_STATUS_LABEL} ${count}` : QUEUE_MODE_STATUS_LABEL;
+}
 
 export function modalModeLabel(mode: VimMode, width: number, ui?: ResolvedVimUi): string {
   const full =
@@ -58,7 +64,7 @@ function statusPartsForItem(
     return [
       ...(ui.mode.enabled ? [modalModeLabel(input.mode, input.width, ui)] : []),
       ...(input.recordingSlot ? [`REC ${input.recordingSlot}`] : []),
-      ...(input.queueActive ? [QUEUE_MODE_STATUS_LABEL] : []),
+      ...(input.queueActive ? [queueStatusLabel(input.queueCount)] : []),
     ];
   }
   if (item === "pendingOperator" && input.pending) return [`${input.pending}…`];
@@ -79,7 +85,7 @@ export function modalStatus(input: ModalStatusInput): ModalStatus {
   if (input.recordingSlot && !ui.status.items.includes("mode"))
     parts.unshift(`REC ${input.recordingSlot}`);
   if (input.queueActive && !ui.status.items.includes("mode"))
-    parts.unshift(QUEUE_MODE_STATUS_LABEL);
+    parts.unshift(queueStatusLabel(input.queueCount));
 
   const status = parts.length > 0 ? ` ${parts.join(" ")} ` : "";
   return ui.status.position === "right" ? { left: "", right: status } : { left: status, right: "" };

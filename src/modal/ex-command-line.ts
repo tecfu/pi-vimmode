@@ -362,6 +362,13 @@ function executeExDirectCommand(
   if (parsed.type === "nohlsearch") {
     return invalidate(finishExState(clearSearchHighlight(state)));
   }
+
+  if (parsed.type === "queueManager") {
+    return withEffects(finishExState(state), [
+      { type: "openQueueManager" },
+      { type: "invalidate" },
+    ]);
+  }
   return undefined;
 }
 
