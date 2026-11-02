@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { PromptQueue, queuedPromptPreview } from "../src/prompt-queue.ts";
 import { QueueManagerOverlayComponent } from "../src/queue-manager-overlay.ts";
+import { facadeQueueSource } from "../src/queue-manager-source.ts";
 
 function stubTui() {
   const state = { renders: 0 };
@@ -20,7 +21,7 @@ function managerFor(queue: PromptQueue, deliver = (_text: string) => true) {
   const closed: boolean[] = [];
   const component = new QueueManagerOverlayComponent(
     tui as never,
-    queue.facade((prompt) => deliver(prompt.text)),
+    facadeQueueSource(queue.facade((prompt) => deliver(prompt.text))),
     {},
     () => closed.push(true),
   );

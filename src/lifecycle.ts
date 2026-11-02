@@ -1,5 +1,6 @@
 import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import type { QueueManagerSource } from "./queue-manager-source.ts";
 import type { ResolvedVimEditorOptions } from "./types.ts";
 
 import {
@@ -12,6 +13,7 @@ import {
   type VimRuntimeConfiguration,
 } from "./config.ts";
 import { PromptQueue, type PromptQueueFacade, type QueuedPrompt } from "./prompt-queue.ts";
+import { QueueManagerView } from "./queue-manager-view.ts";
 import { type QueueAuthor, type QueueAuthorVia } from "./queue-model.ts";
 import { connectIntercom, type PeerKnocker } from "./queue-peer.ts";
 import { QueueService, type CheckpointCapture } from "./queue-service.ts";
@@ -44,6 +46,7 @@ type CreateEditor = (
     onQueueMessage?: (text: string) => void;
     onQueueModeChange?: (active: boolean) => void;
     queue?: PromptQueueFacade;
+    queueSource?: QueueManagerSource;
   },
 ) => TrackedEditor;
 type Schedule = (callback: () => void) => void;
@@ -158,6 +161,7 @@ type EditorState = {
   /** Prompts entered while queue mode is on; Pi only ever sees the head. */
   queue: PromptQueue;
   queueFile: QueueFile;
+  queueSource?: QueueManagerSource;
   /** The same queue, addressed across sessions: what the `queue` tool drives. Built on
    first use, because it closes over state and cannot be constructed inside its literal. */
   queueService?: QueueService;
@@ -256,6 +260,7 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
       onQueueMessage: state.queueMessage,
       onQueueModeChange: state.queueModeChange,
       queue: state.queueFacade,
+      queueSource: state.queueSource,
     });
     state.editors.add(editor);
     if (state.agentBusy) editor.setAgentBusy(true);
@@ -576,6 +581,13 @@ export function registerVimLifecycle(
     if (!state.agentBusy) deliverQueueHead(state);
   };
   state.queueModeChange = (active) => applyQueueMode(state, active, state.notify);
+  // The manager reads the store, not just this session's memory: another session's
+  // queue is listable, and editing it is an ask the peer applies to its own file.
+  state.queueSource = new QueueManagerView({
+    service: () => queueServiceFor(state, pi),
+    local: state.queueFacade,
+    selfLabel: () => queueAuthor(state.queueFile, "key").session,
+  });
   registerVimCommand(pi, state);
   // The agent's view of the same queue. Registered once, at setup: pi has no
   // unregisterTool, so it lives or dies with the extension, not with a session.

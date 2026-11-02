@@ -60,6 +60,8 @@ export type PromptQueueOptions = {
 /** Operations the queue manager overlay performs against the live queue. */
 export type PromptQueueFacade = {
   list(): readonly QueuedPrompt[];
+  /** The same pending view, with provenance: what the manager renders per row. */
+  details(): readonly QueueEntry[];
   size(): number;
   remove(index: number): boolean;
   move(index: number, direction: QueueDirection): boolean;
@@ -269,6 +271,7 @@ export class PromptQueue {
   facade(deliver: (prompt: QueuedPrompt) => boolean): PromptQueueFacade {
     return {
       list: () => this.list(),
+      details: () => pendingEntries(this.log),
       size: () => this.size,
       remove: (index) => this.removeAt(index) !== undefined,
       move: (index, direction) => this.moveAt(index, direction),

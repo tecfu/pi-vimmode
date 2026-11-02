@@ -9,7 +9,7 @@ import type {
   QueueOp,
   QueueOpRecord,
 } from "./queue-model.ts";
-import type { PeerKnocker } from "./queue-peer.ts";
+import type { PeerKnocker, PeerSession } from "./queue-peer.ts";
 import type { QueueIdentity, QueuePaths, QueueSummary } from "./queue-store.ts";
 
 import { applyOp, makeOpRecord, pendingEntries } from "./queue-model.ts";
@@ -101,6 +101,28 @@ export class QueueService {
   /** Where this service's store lives. Tests post into the inbox through it. */
   get root(): string {
     return this.deps.paths.root;
+  }
+
+  /**
+   * Pending rows for the manager, typed. Own queue reads the in-memory log; a peer
+   * is read straight from its file, because a read cannot corrupt anything.
+   * An unresolvable or fileless peer has no rows, which the manager shows as empty.
+   */
+  rowsFor(session?: string): QueueRow[] {
+    if (session === undefined || this.isSelf(session)) {
+      return this.pending().map((entry) => describe(entry, this.deps.now()));
+    }
+    const target = resolvePeer(this.peers(), session).found;
+    if (target === undefined) return [];
+    const envelope = readEnvelope(this.deps.paths.root, target.sessionId, this.deps.now());
+    if (envelope === undefined) return [];
+    return pendingEntries(envelope.log).map((entry) => describe(entry, this.deps.now()));
+  }
+
+  /** Every session with a queue file, this one marked, for the manager's focus cycle. */
+  queueSessions(): (PeerSession & { self: boolean })[] {
+    const selfId = this.deps.identity().sessionId;
+    return this.peers().map((queue) => ({ ...queue, self: queue.sessionId === selfId }));
   }
 
   entries(): readonly QueueEntry[] {
@@ -466,7 +488,20 @@ export class QueueService {
   }
 }
 
-function describe(entry: QueueEntry, now: number): Record<string, unknown> {
+/** A queued entry, flattened for display and for the tool's JSON. */
+export type QueueRow = {
+  id: string;
+  text: string;
+  kind: QueueEntry["kind"];
+  state: QueueEntry["state"];
+  createdAt: number;
+  age: string;
+  author: string;
+  via: QueueEntry["author"]["via"];
+  attempts: number;
+};
+
+function describe(entry: QueueEntry, now: number): QueueRow {
   return {
     id: entry.id,
     text: entry.text,

@@ -112,13 +112,17 @@ function createContext(cwd = "/workspace"): FakeContext {
 function createRealEditor(
   configuration: VimRuntimeConfiguration,
   vimOptions?: { onShutdown?: () => void; onQueueMessage?: (text: string) => void },
+  onOverlay: (component: unknown) => void = () => {},
 ): VimEditor {
   const tui = {
     terminal: { rows: 24, columns: 80, write: () => {} },
     requestRender: () => {},
     getShowHardwareCursor: () => false,
     setShowHardwareCursor: () => {},
-    showOverlay: () => ({ hide: () => {} }),
+    showOverlay: (component: unknown) => {
+      onOverlay(component);
+      return { hide: () => {} };
+    },
   } as any;
   const theme = {
     borderColor: (text: string) => text,
@@ -192,6 +196,7 @@ function createLifecycleHarness(
   const asyncLoads = new Set<number>();
   const rejectedLoads = new Set<number>();
   const deferredLoads = new Set<number>();
+  const overlays: unknown[] = [];
   const resolveDeferred = new Map<number, (result: VimConfigLoadResult) => void>();
   const queuedMessages: Array<{ content: unknown; options: unknown }> = [];
   let loadIndex = 0;
@@ -232,7 +237,9 @@ function createLifecycleHarness(
     createEditor: (_tui, _theme, _keybindings, configuration, vimOptions) => {
       shutdownCallbacks.push(vimOptions?.onShutdown);
       if (useRealEditor) {
-        const editor = createRealEditor(configuration, vimOptions);
+        const editor = createRealEditor(configuration, vimOptions, (component) =>
+          overlays.push(component),
+        );
         realEditors.push(editor);
         return editor;
       }
@@ -253,6 +260,7 @@ function createLifecycleHarness(
     loadCalls,
     createdEditors,
     realEditors,
+    overlays,
     shutdownCallbacks,
     warnings,
     fatalLoads,
@@ -1209,6 +1217,73 @@ test("piVimMode.queue.peerTrust auto applies a posted op at session start", () =
     expect(
       (readEnvelope(dir, target.sessionId)?.log.entries ?? []).map((entry) => entry.text),
     ).toEqual(["rebase before you continue"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+type ManagerComponent = {
+  handleInput(data: string): void;
+  render(width: number): string[];
+};
+
+test("the manager the editor opens reads the store, including another session's queue", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-manager-"));
+  try {
+    // Another session, with one prompt it typed itself.
+    const peerFile = new QueueFile(dir);
+    peerFile.bind({ sessionId: "sess_peer", name: "peer", cwd: "/other", pid: deadPid() });
+    const seed = new PromptQueue({
+      author: () => ({
+        session: "peer",
+        sessionId: "sess_peer",
+        cwd: "/other",
+        via: "key" as const,
+      }),
+    });
+    seed.attach(peerFile);
+    seed.enqueue("rebase the branch when you settle");
+
+    const { hooks, commands, realEditors, overlays } = createLifecycleHarness(
+      [{ ...DEFAULT_VIM_OPTIONS, queueDir: dir }],
+      true,
+    );
+    const ctx = createContext("/repo");
+    ctx.sessionManager = {
+      getSessionId: () => "sess_self",
+      getSessionName: () => "self",
+      getSessionFile: () => join(dir, "self.jsonl"),
+      getCwd: () => "/repo",
+    };
+    hooks.get("session_start")?.({}, ctx);
+    const factory = ctx.ui.setCalls[0]!;
+    factory({}, {}, {});
+    hooks.get("agent_start")?.({}, ctx);
+    await commands.get("vimmode")?.handler("queue on", ctx);
+
+    const editor = realEditors[0]!;
+    for (const key of ["n", "e", "x", "t"]) editor.handleInput(key);
+    editor.handleInput("\r");
+    editor.handleInput("\x1b");
+    expect(overlays).toHaveLength(0);
+
+    // gj opens the manager, and the store behind it is what the manager shows.
+    for (const key of ["g", "j"]) editor.handleInput(key);
+    expect(overlays).toHaveLength(1);
+    const manager = overlays[0] as ManagerComponent;
+    const own = manager.render(100).join("\n");
+    expect(own).toContain("QUEUE · 1 pending");
+    expect(own).toContain("next");
+    expect(own).toContain("0s");
+    expect(own).toContain("prompt");
+
+    // ] steps to the peer: its rows read as theirs, and its Enter is gone.
+    manager.handleInput("]");
+    const peer = manager.render(100).join("\n");
+    expect(peer).toContain("peer (peer)");
+    expect(peer).toContain("rebase the branch when you settle");
+    expect(peer).toContain("from peer");
+    expect(peer).not.toContain("Enter send now");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
