@@ -63,6 +63,7 @@ import { appendMessageHistory } from "./modal/inspect.ts";
 import { createModalState, resetTransientState } from "./modal/state.ts";
 import { modalStatus } from "./modal/view.ts";
 import { QueueManagerOverlayComponent } from "./queue-manager-overlay.ts";
+import { facadeQueueSource, type QueueManagerSource } from "./queue-manager-source.ts";
 import {
   cursorShapeEscape,
   renderPromptEditor,
@@ -238,6 +239,8 @@ export type VimEditorOptions = {
   onQueueMessage?: (text: string) => void;
   /** Live view of the prompts queue mode holds, for the manager overlay. */
   queue?: PromptQueueFacade;
+  /** The same queue plus the other sessions' queue files, when there is a store to read. */
+  queueSource?: QueueManagerSource;
 };
 
 export type ResetTerminalCursorStyleOptions = {
@@ -264,6 +267,7 @@ export class VimEditor extends CustomEditor {
   private readonly onQueueModeChange?: (active: boolean) => void;
   private readonly onQueueMessage?: (text: string) => void;
   private readonly queue?: PromptQueueFacade;
+  private readonly queueSource?: QueueManagerSource;
 
   constructor(
     tui: TUI,
@@ -283,6 +287,7 @@ export class VimEditor extends CustomEditor {
     this.onQueueModeChange = vimOptions?.onQueueModeChange;
     this.onQueueMessage = vimOptions?.onQueueMessage;
     this.queue = vimOptions?.queue;
+    this.queueSource = vimOptions?.queueSource;
     this.modalState = createModalState(this.options.startMode);
     this.originalHardwareCursorVisible = this.getHardwareCursorVisibility();
     this.applyTerminalCursorStyle(cursorStyleForMode(this.options, this.modalState.mode));
@@ -758,11 +763,16 @@ export class VimEditor extends CustomEditor {
     }
 
     let handle: OverlayHandle | undefined;
-    const component = new QueueManagerOverlayComponent(this.tui, queue, this.overlayTheme, () => {
-      handle?.hide();
-      if (this.queueOverlay === handle) this.queueOverlay = undefined;
-      this.tui.requestRender();
-    });
+    const component = new QueueManagerOverlayComponent(
+      this.tui,
+      this.queueSource ?? facadeQueueSource(queue),
+      this.overlayTheme,
+      () => {
+        handle?.hide();
+        if (this.queueOverlay === handle) this.queueOverlay = undefined;
+        this.tui.requestRender();
+      },
+    );
     handle = this.tui.showOverlay(component, {
       anchor: "center",
       width: "90%",

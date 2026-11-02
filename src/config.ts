@@ -19,6 +19,8 @@ import type {
   ResolvedVimPromptStructures,
   ResolvedVimPromptTransforms,
   ResolvedVimSearch,
+  ResolvedVimQueue,
+  PartialVimQueueOptions,
   ResolvedVimEasymotion,
   ResolvedVimUi,
   StartupMode,
@@ -272,6 +274,11 @@ export const DEFAULT_VIM_SEARCH = Object.freeze({
   currentHighlightColor: "\x1b[30;43m",
 }) as unknown as ResolvedVimSearch;
 
+export const DEFAULT_VIM_QUEUE = Object.freeze({
+  peerTrust: "auto",
+  ttlHours: 24,
+}) as unknown as ResolvedVimQueue;
+
 export const DEFAULT_VIM_EASYMOTION = Object.freeze({
   labelColor: "\x1b[31m",
 }) as unknown as ResolvedVimEasymotion;
@@ -331,6 +338,7 @@ export const DEFAULT_VIM_OPTIONS: ResolvedVimEditorOptions = Object.freeze({
   macros: DEFAULT_VIM_MACROS,
   marks: DEFAULT_VIM_MARKS,
   search: DEFAULT_VIM_SEARCH,
+  queue: DEFAULT_VIM_QUEUE,
   easymotion: DEFAULT_VIM_EASYMOTION,
   exCommand: DEFAULT_VIM_EX_COMMAND,
   feedback: DEFAULT_VIM_FEEDBACK,
@@ -348,6 +356,8 @@ type PartialVimOptions = {
   macros?: PartialMacroOptions;
   marks?: PartialMarkOptions;
   search?: PartialSearchOptions;
+  queueDir?: string;
+  queue?: PartialVimQueueOptions;
   easymotion?: PartialVimEasymotionOptions;
   exCommand?: PartialExCommandOptions;
   feedback?: PartialFeedbackOptions;
@@ -522,6 +532,10 @@ function cloneEasymotion(
   return { ...easymotion };
 }
 
+function cloneQueue(queue: ResolvedVimQueue = DEFAULT_VIM_QUEUE): ResolvedVimQueue {
+  return { ...queue };
+}
+
 function cloneExCommand(
   exCommand: ResolvedVimExCommand = DEFAULT_VIM_EX_COMMAND,
 ): ResolvedVimExCommand {
@@ -579,6 +593,9 @@ export function cloneResolvedVimOptions(
     macros: options.macros ? cloneMacros(options.macros) : undefined,
     marks: options.marks ? cloneMarks(options.marks) : undefined,
     search: options.search ? cloneSearch(options.search) : undefined,
+    queueDir: options.queueDir,
+    queue: options.queue ? cloneQueue(options.queue) : undefined,
+    easymotion: options.easymotion ? cloneEasymotion(options.easymotion) : undefined,
     exCommand: options.exCommand ? cloneExCommand(options.exCommand) : undefined,
     feedback: options.feedback ? cloneFeedback(options.feedback) : undefined,
     promptStructures: options.promptStructures
@@ -1550,6 +1567,46 @@ type PartialExCommandOptions = {
   autocomplete?: boolean;
 };
 
+/** A path, or nothing: an empty or non-string `queueDir` warns and leaves the store default in place. */
+function parseQueueDir(value: unknown, sourceLabel: string): { dir?: string; warnings: string[] } {
+  if (value === undefined) return { warnings: [] };
+  if (typeof value === "string" && value.trim().length > 0)
+    return { dir: value.trim(), warnings: [] };
+  return { warnings: [`${sourceLabel}: piVimMode.queueDir must be a non-empty path`] };
+}
+
+/**
+ * The queue's own settings. `queueDir` is a path with no default of its own: absent means
+ * `$PI_VIMMODE_QUEUE_DIR` or `~/.pi/agent/queues`, decided by the store, which keeps the
+ * config file free of machine-specific paths.
+ */
+function parseQueue(
+  value: unknown,
+  sourceLabel: string,
+): { partial?: PartialVimQueueOptions; warnings: string[] } {
+  const warnings: string[] = [];
+  const partial: PartialVimQueueOptions = {};
+  if (value === undefined) return { warnings };
+  if (!isRecord(value)) {
+    warnings.push(`${sourceLabel}: piVimMode.queue must be an object`);
+    return { warnings };
+  }
+
+  if (value.peerTrust === "auto" || value.peerTrust === "manual") {
+    partial.peerTrust = value.peerTrust;
+  } else if (value.peerTrust !== undefined) {
+    warnings.push(`${sourceLabel}: piVimMode.queue.peerTrust must be "auto" or "manual"`);
+  }
+
+  if (typeof value.ttlHours === "number" && Number.isFinite(value.ttlHours) && value.ttlHours > 0) {
+    partial.ttlHours = value.ttlHours;
+  } else if (value.ttlHours !== undefined) {
+    warnings.push(`${sourceLabel}: piVimMode.queue.ttlHours must be a positive number of hours`);
+  }
+
+  return { partial: Object.keys(partial).length > 0 ? partial : undefined, warnings };
+}
+
 function parseExCommand(
   value: unknown,
   sourceLabel: string,
@@ -1776,6 +1833,14 @@ function parsePiVimMode(
   const search = parseSearch(value.search, sourceLabel);
   partial.search = search.partial;
   warnings.push(...search.warnings);
+
+  const queueDir = parseQueueDir(value.queueDir, sourceLabel);
+  if (queueDir.dir !== undefined) partial.queueDir = queueDir.dir;
+  warnings.push(...queueDir.warnings);
+
+  const queue = parseQueue(value.queue, sourceLabel);
+  partial.queue = queue.partial;
+  warnings.push(...queue.warnings);
 
   const exCommand = parseExCommand(value.exCommand, sourceLabel);
   partial.exCommand = exCommand.partial;
@@ -2448,6 +2513,17 @@ function mergeSearch(target: ResolvedVimSearch, partial: PartialSearchOptions): 
   Object.assign(target, partial);
 }
 
+/** The store location and the trust policy arrive together but are shaped differently. */
+function mergeQueueSettings(target: ResolvedVimEditorOptions, partial: PartialVimOptions): void {
+  if (typeof partial.queueDir === "string") target.queueDir = partial.queueDir;
+  const queue = mergedPartialValue(target.queue, partial.queue, cloneQueue, mergeQueue);
+  if (queue) target.queue = queue;
+}
+
+function mergeQueue(target: ResolvedVimQueue, partial: PartialVimQueueOptions): void {
+  Object.assign(target, partial);
+}
+
 function mergeEasymotion(
   target: ResolvedVimEasymotion,
   partial: PartialVimEasymotionOptions,
@@ -2892,6 +2968,7 @@ function mergePartialOptions(target: ResolvedVimEditorOptions, partial: PartialV
   if (macros) target.macros = macros;
   if (marks) target.marks = marks;
   if (search) target.search = search;
+  mergeQueueSettings(target, partial);
   if (easymotion) target.easymotion = easymotion;
   if (exCommand) target.exCommand = exCommand;
   if (feedback) target.feedback = feedback;

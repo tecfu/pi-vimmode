@@ -78,10 +78,49 @@ Queue mode holds submitted prompts in pi-vimmode's own list rather than handing 
 
 - `:queue` opens the manager from Ex mode, in any mode, whether or not queue mode is on.
 - `gj` in normal mode opens it too (the bindable `command.showQueue` action). Those bindings exist **only while queue mode is on**: with the mode off, `g` and `s` behave exactly as they always did. Binding a queue-only prefix such as `sq` therefore cannot quietly disable the `s` operator for the whole session.
-- In the overlay: `j`/`k` (or arrows) move the selection, `J`/`K` reorder the selected prompt down or up, `d` deletes it, `u` restores the most recently deleted prompt to its old position, `Enter` sends the selected prompt to Pi immediately, and `q`, `Esc`, or `Ctrl+C` closes the manager.
+- In the overlay: `j`/`k` (or arrows) move the selection, `J`/`K` reorder the selected prompt down or up, `d` deletes it, `u` restores the most recently deleted prompt to its old position, `e` opens the selected prompt for typing (Enter commits, `Esc` abandons the edit and leaves the wording alone), `Enter` sends the selected prompt to Pi immediately, and `q`, `Esc`, or `Ctrl+C` closes the manager.
+- Each row carries its provenance: `› 2 12m prompt you add the retry test` — position, how long ago it was queued, whether it is a deliverable `prompt` or a parked `note`, and **who put it there**: `you` (typed), `agent` (the `queue` tool), `from cnw` (a peer posted it), or `checkpoint`. Below roughly 64 columns the row keeps only the text, so a narrow terminal still reads cleanly.
 - The status border counts what is waiting: `QUEUE` when queue mode is on with nothing held, `QUEUE 3` when three prompts are queued.
 - Closing the overlay leaves the queue intact; the next settle delivers the head of the list. Deleting a prompt before its turn means Pi never sees it.
 - A settle delivers one prompt, matching Pi's default `followUpMode: "one-at-a-time"`. Reopening the manager while a delivery is in flight shows the remaining list.
+
+### Who the queue belongs to
+
+The held list is not this session's private scratch space any more: it is a file, and other
+sessions and the agent itself can see and change it.
+
+- Each session's queue lives at `~/.pi/agent/queues/live/<sessionId>.json`
+  (`piVimMode.queueDir` moves the directory). Writes are atomic and each file has exactly one
+  live writer, so two sessions never interleave half-edits.
+- Every entry records **who created it and when**: the session name, its id, its working
+  directory, and whether a human typed it, the agent enqueued it with the `queue` tool, or a
+  peer posted it. Entry ids are content hashes, so the same prompt arriving twice lands once.
+- The agent sees the queue through the `queue` tool: `list`, `enqueue`, `edit`, `delete`,
+  `restore`, `release`, `move`, `deliver_now`, `checkpoint`, `list_checkpoints`,
+  `restore_checkpoint`, `sessions`, `inspect`. Both the manager overlay and the tool drive the
+  same mutation code, so nothing an agent can do is invisible to you, and everything you can do
+  is something an agent can do.
+- `[` and `]` in the manager move between queues: your own first, then every other session that
+  has a queue file. Reading a peer is direct — a read cannot corrupt anything — but its rows are
+  dimmed, the title names it (`QUEUE · 2 pending · beta (peer)`), and `Enter` is gone: you cannot
+  start somebody else's turn. Deleting, reordering or editing a peer's prompt posts an operation
+  to that session's inbox, which it applies to its own file when it next settles, so the
+  one-writer-per-file rule holds even while the manager appears to edit somebody else's queue.
+  With `piVimMode.queue.peerTrust` set to `manual` the ask sits unread instead.
+- Another session can put a prompt on this queue by name or id (`enqueue` with `session`). The
+  op is _posted_ to this session's inbox and applied **by this session** when it next settles,
+  which keeps one writer per file; a dead session's queue is written directly after a takeover
+  claim. `piVimMode.queue.peerTrust: "manual"` refuses all of it, and the posted ops stay
+  readable in the inbox until released.
+- `checkpoint` freezes the queue plus the session branch into `archive/`;
+  `restore_checkpoint` brings entries back idempotently. That is the escape hatch when work
+  deviates: the instructions that were waiting survive the fork instead of being retyped.
+- A resumed or forked session adopts the queue of the thread it came from (matched by session
+  file, and only when that owner is no longer running), so a restart does not silently empty
+  what was waiting.
+- `d` in the manager marks a prompt `dropped` rather than erasing it; `u` restores it.
+  Anything dropped, or any op nobody read, ages out to `archive/` after
+  `piVimMode.queue.ttlHours`.
 
 - Prompt templates and extension commands are not expanded for queued text. The text reaches Pi as a user message with the follow-up delivery mode, which is the same contract Pi uses for queued follow-ups.
 

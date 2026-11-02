@@ -40,6 +40,8 @@ type DeclaredPropertyPaths =
   | `feedback.${keyof VimConfigApi["feedback"] & string}`
   | `promptStructures.${keyof VimConfigApi["promptStructures"] & string}`
   | `promptTransforms.${keyof VimConfigApi["promptTransforms"] & string}`
+  | "queueDir"
+  | `queue.${keyof VimConfigApi["queue"] & string}`
   | "keymap.actionPresets"
   | "keymap.operatorMotions";
 type PropertyCoverage = Assert<Equal<MetadataPropertyPaths, DeclaredPropertyPaths>>;

@@ -9,7 +9,12 @@ import {
   ACTION_KEYBINDING_PRESETS,
   ACTION_KEYBINDING_RECIPES,
 } from "../src/action-keybinding-recipes.ts";
-import { DEFAULT_VIM_OPTIONS, loadVimOptions, resolveVimOptions } from "../src/config.ts";
+import {
+  DEFAULT_VIM_OPTIONS,
+  DEFAULT_VIM_SEARCH,
+  loadVimOptions,
+  resolveVimOptions,
+} from "../src/config.ts";
 import { DIAGNOSTIC_ACTIONS } from "../src/diagnostic-actions.ts";
 
 function tempSettings() {
@@ -1020,6 +1025,7 @@ test("parses search highlight options", () => {
 
   expect(result.warnings).toEqual([]);
   expect(result.options.search).toEqual({
+    ...DEFAULT_VIM_SEARCH,
     highlight: false,
     highlightCurrent: false,
     clearOnCancel: false,

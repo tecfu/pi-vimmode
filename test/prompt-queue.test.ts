@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { PromptQueue, queuedPromptPreview } from "../src/prompt-queue.ts";
 import { QueueManagerOverlayComponent } from "../src/queue-manager-overlay.ts";
+import { facadeQueueSource } from "../src/queue-manager-source.ts";
 
 function stubTui() {
   const state = { renders: 0 };
@@ -20,7 +21,7 @@ function managerFor(queue: PromptQueue, deliver = (_text: string) => true) {
   const closed: boolean[] = [];
   const component = new QueueManagerOverlayComponent(
     tui as never,
-    queue.facade((prompt) => deliver(prompt.text)),
+    facadeQueueSource(queue.facade((prompt) => deliver(prompt.text))),
     {},
     () => closed.push(true),
   );
@@ -112,7 +113,7 @@ test("the facade reports the queue for the manager", () => {
 });
 
 test("preview collapses multi-line prompts to one row", () => {
-  const prompt = { id: 1, text: "line one\nline two" };
+  const prompt = { id: "a1b2c3d4e5f6", text: "line one\nline two" };
   expect(queuedPromptPreview(prompt)).toBe("line one ⏎");
 });
 

@@ -44,6 +44,9 @@ export const TRUSTED_JS_OPTION_PATHS = [
   "promptTransforms.enabled",
   "promptTransforms.actions",
   "promptTransforms.commands",
+  "queueDir",
+  "queue.peerTrust",
+  "queue.ttlHours",
 ] as const;
 
 export type TrustedJsOptionPath = (typeof TRUSTED_JS_OPTION_PATHS)[number];
