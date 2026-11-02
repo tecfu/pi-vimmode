@@ -112,7 +112,7 @@ test("the facade reports the queue for the manager", () => {
 });
 
 test("preview collapses multi-line prompts to one row", () => {
-  const prompt = { id: 1, text: "line one\nline two" };
+  const prompt = { id: "a1b2c3d4e5f6", text: "line one\nline two" };
   expect(queuedPromptPreview(prompt)).toBe("line one ⏎");
 });
 

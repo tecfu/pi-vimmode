@@ -11,6 +11,12 @@ import {
   type VimRuntimeConfiguration,
 } from "./config.ts";
 import { PromptQueue, type PromptQueueFacade, type QueuedPrompt } from "./prompt-queue.ts";
+import { type QueueAuthor, type QueueAuthorVia } from "./queue-model.ts";
+import { connectIntercom, type PeerKnocker } from "./queue-peer.ts";
+import { QueueService, type CheckpointCapture } from "./queue-service.ts";
+import { type QueueIdentity, defaultQueueDir, QueueFile } from "./queue-store.ts";
+import { queuePaths } from "./queue-store.ts";
+import { registerQueueTool } from "./queue-tool.ts";
 import { type ResetTerminalCursorStyleOptions, VimEditor } from "./vim-editor.ts";
 
 type VimEditorFactory = (
@@ -46,6 +52,8 @@ export type VimLifecycleDependencies = {
   loadOptions?: (paths: VimConfigPaths) => VimConfigLoadResult | Promise<VimConfigLoadResult>;
   createEditor?: CreateEditor;
   schedule?: Schedule;
+  /** Where queue files live; defaults to the agent's queue directory. */
+  queueDir?: string;
 };
 
 type ConfigState = {
@@ -148,6 +156,14 @@ type EditorState = {
   queueModeChange?: (active: boolean) => void;
   /** Prompts entered while queue mode is on; Pi only ever sees the head. */
   queue: PromptQueue;
+  queueFile: QueueFile;
+  /** The same queue, addressed across sessions: what the `queue` tool drives. Built on
+   first use, because it closes over state and cannot be constructed inside its literal. */
+  queueService?: QueueService;
+  /** Session manager snapshot, captured from the last context pi handed us. */
+  queueBranch?: () => CheckpointCapture | undefined;
+  /** Cached because connecting to pi-intercom is a handshake, not a per-call probe. */
+  peerKnocker?: PeerKnocker | null;
   queueFacade?: PromptQueueFacade;
   deliverPrompt?: (prompt: QueuedPrompt) => boolean;
   notify?: (message: string, level?: "info" | "warning" | "error") => void;
@@ -228,7 +244,8 @@ function createEditorState(dependencies: VimLifecycleDependencies): EditorState 
     enabled: true,
     agentBusy: false,
     queueMode: false,
-    queue: new PromptQueue(),
+    queueFile: new QueueFile(dependencies.queueDir ?? defaultQueueDir()),
+    queue: new PromptQueue({ author: (via) => queueAuthor(state.queueFile, via) }),
     hasInstalledFactory: false,
     installGeneration: 0,
   };
@@ -281,6 +298,135 @@ function disableEditor(state: EditorState, ctx: ExtensionContext): void {
     state.hasInstalledFactory = false;
   }
   ctx.ui.setStatus("pi-vimmode", "vim off");
+}
+
+/**
+ * Who a queued prompt is attributed to. A peer reading the file needs an answer
+ * that is not "the machine", so the session's own name is what is recorded.
+ */
+function queueAuthor(file: QueueFile, via: QueueAuthorVia): QueueAuthor {
+  const identity = file.identity();
+  if (identity === undefined) return { session: "human", sessionId: "", cwd: "", via };
+  return { session: identity.name, sessionId: identity.sessionId, cwd: identity.cwd, via };
+}
+
+function sessionIdentity(ctx: ExtensionContext): QueueIdentity | undefined {
+  const manager = ctx.sessionManager;
+  const sessionId = typeof manager?.getSessionId === "function" ? manager.getSessionId() : "";
+  if (sessionId.length === 0) return undefined;
+  const named =
+    typeof manager?.getSessionName === "function" ? manager.getSessionName() : undefined;
+  const file = typeof manager?.getSessionFile === "function" ? manager.getSessionFile() : undefined;
+  return {
+    sessionId,
+    name: named ?? sessionId.slice(0, 8),
+    cwd: typeof manager?.getCwd === "function" ? manager.getCwd() : "",
+    pid: process.pid,
+    ...(file === undefined ? {} : { sessionFile: file }),
+  };
+}
+
+/**
+ * The queue as the fleet sees it. Built late and once: it closes over the live queue and the
+ * bound identity, both of which only exist after the first session_start.
+ */
+function queueServiceFor(state: EditorState, pi: ExtensionAPI): QueueService {
+  state.queueService ??= new QueueService({
+    paths: queuePaths(state.queueFile.root),
+    queue: state.queue,
+    identity: () => state.queueFile.identity() ?? anonymousIdentity(),
+    author: (via) => queueAuthor(state.queueFile, via),
+    knocker: () => {
+      state.peerKnocker ??= connectIntercom((pi as { events?: unknown }).events);
+      return state.peerKnocker;
+    },
+    peerTrust: "auto",
+    flush: () => deliverQueueHead(state),
+    captureBranch: () => state.queueBranch?.(),
+  });
+  return state.queueService;
+}
+
+function anonymousIdentity(): QueueIdentity {
+  return { sessionId: "", name: "this session", cwd: process.cwd(), pid: process.pid };
+}
+
+/**
+ * What the agent was looking at, in the form a checkpoint archives. Only message entries
+ * carry context worth keeping, and a non-message entry still gets a row so the branch's shape
+ * survives — a checkpoint that silently drops half the tree would misreport what it captured.
+ */
+function captureBranchFrom(ctx: ExtensionContext): CheckpointCapture | undefined {
+  const manager = ctx.sessionManager as unknown as
+    | {
+        getBranch?: () => Array<{
+          id: string;
+          type: string;
+          message?: { role?: string; content?: unknown };
+        }>;
+        getLeafId?: () => string | null;
+      }
+    | undefined;
+  if (manager === undefined || typeof manager.getBranch !== "function") return undefined;
+  const branch = manager.getBranch().map((entry) => ({
+    entryId: entry.id,
+    role: entry.message?.role ?? entry.type,
+    text: firstText(entry.message?.content),
+  }));
+  return {
+    branch,
+    leafId: typeof manager.getLeafId === "function" ? (manager.getLeafId() ?? null) : null,
+  };
+}
+
+function firstText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      const text = (part as { text?: unknown }).text;
+      if (typeof text === "string" && text.length > 0) return text;
+    }
+  }
+  return "";
+}
+
+/**
+ * A queue's durable home is found at session start, not at construction: the
+ * same session restarts with its own file, a resumed session inherits the file
+ * of the thread it was resumed from, and a session with no identity (a test
+ * harness, a headless probe) simply stays in memory.
+ */
+function hydrateQueue(
+  state: EditorState,
+  event: unknown,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+): void {
+  const identity = sessionIdentity(ctx);
+  if (identity === undefined) {
+    state.queue.attach(undefined);
+    return;
+  }
+  state.queueFile.bind(identity);
+  state.queue.attach(state.queueFile);
+  queueServiceFor(state, pi).claim();
+  const held = state.queueFile.load();
+  if (held !== undefined) {
+    state.queue.restore(held);
+    return;
+  }
+  const previous = (event as { previousSessionFile?: unknown }).previousSessionFile;
+  if (typeof previous !== "string" || previous.length === 0) return;
+  const adopted = state.queueFile.adopt(previous);
+  if (adopted.adopted > 0) state.queue.restore(adopted.log);
+}
+
+/**
+ * Keep a way to read the session branch without holding a stale context: the closure asks pi
+ * for the branch at checkpoint time, and it is re-taken whenever pi hands us a fresh context.
+ */
+function observeSessionBranch(state: EditorState, ctx: ExtensionContext): void {
+  state.queueBranch = () => captureBranchFrom(ctx);
 }
 
 function notifyVimStatus(state: EditorState, ctx: ExtensionContext): void {
@@ -397,11 +543,21 @@ export function registerVimLifecycle(
   };
   state.queueModeChange = (active) => applyQueueMode(state, active, state.notify);
   registerVimCommand(pi, state);
-  pi.on("session_start", (_event, ctx) => {
-    state.queue.clear();
+  // The agent's view of the same queue. Registered once, at setup: pi has no
+  // unregisterTool, so it lives or dies with the extension, not with a session.
+  registerQueueTool(pi, () => queueServiceFor(state, pi));
+  pi.on("session_start", (event, ctx) => {
+    hydrateQueue(state, event, ctx, pi);
+    observeSessionBranch(state, ctx);
+    // A session that was asleep while peers posted to it reads its mail the moment it wakes,
+    // before anyone can type: an op nobody acted on is not allowed to look like an empty queue.
+    queueServiceFor(state, pi).drainOps();
     installEditorSoon(state, ctx);
   });
-  pi.on("resources_discover", (_event, ctx) => installEditorSoon(state, ctx));
+  pi.on("resources_discover", (_event, ctx) => {
+    observeSessionBranch(state, ctx);
+    installEditorSoon(state, ctx);
+  });
   pi.on("agent_start", () => {
     state.agentBusy = true;
     for (const editor of state.editors) editor.setAgentBusy(true);
@@ -412,6 +568,9 @@ export function registerVimLifecycle(
     observeInstall(installEditor(state, ctx), ctx);
   });
   onAgentSettled(pi, () => {
+    // Mail first, then the head of what is now waiting: a peer's prompt that arrived during
+    // the turn is part of the queue the settle is supposed to drain, not a later event.
+    queueServiceFor(state, pi).drainOps();
     if (state.enabled) deliverQueueHead(state);
   });
   pi.on("session_shutdown", (event) => {

@@ -223,7 +223,7 @@ test("the TTL sweep ages dropped entries into the archive and leaves live work",
     "keep",
   ]);
   expect(sweepStore(root, 1_000, sweptAt).archivedEntries).toEqual([]);
-  expect(listArchive(root, "dropped")).toEqual([`dropped-session-a-${String(sweptAt)}.json`]);
+  expect(listArchive(root, "dropped")).toEqual([`session-a-${String(sweptAt)}`]);
 });
 
 test("the sweep also retires op records nobody ever claimed", () => {
@@ -250,7 +250,7 @@ test("checkpoints land in the archive under a name the session can hand back", (
     join(queuePaths(root).archive, "checkpoint-cp-1.json"),
   );
   expect(readArchive(root, "checkpoint", "cp-1")).toEqual(payload);
-  expect(listArchive(root, "checkpoint")).toEqual(["checkpoint-cp-1.json"]);
+  expect(listArchive(root, "checkpoint")).toEqual(["cp-1"]);
   expect(listArchive(root, "none")).toEqual([]);
   expect(listArchive(join(root, "missing"), "checkpoint")).toEqual([]);
 });

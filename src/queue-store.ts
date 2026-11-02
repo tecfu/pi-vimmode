@@ -45,6 +45,8 @@ export type QueueIdentity = {
   readonly name: string;
   readonly cwd: string;
   readonly pid: number;
+  /** Resuming rewrites the id, so the file path is what ties one queue to its successor. */
+  readonly sessionFile?: string;
 };
 
 export type QueueEnvelope = QueueIdentity & {
@@ -58,9 +60,10 @@ export type QueueSummary = QueueIdentity & {
   readonly updatedAt: number;
   readonly alive: boolean;
   readonly pending: number;
+  /** Held notes: not deliverable, but still waiting to be seen. */
+  readonly held: number;
   readonly path: string;
 };
-
 export function defaultQueueDir(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.PI_VIMMODE_QUEUE_DIR;
   if (typeof override === "string" && override.trim().length > 0) return override.trim();
@@ -271,6 +274,11 @@ export function dropOp(root: string, claims: readonly string[], opId: string): v
   }
 }
 
+/** Deliverable-now items: a held note is waiting, but it is not a turn waiting. */
+function pendingDeliverable(entries: readonly QueueEntry[]): number {
+  return entries.filter((entry) => entry.state === "pending" && entry.kind === "prompt").length;
+}
+
 export function listQueues(root: string): QueueSummary[] {
   const directory = queuePaths(root).live;
   let names: string[] = [];
@@ -290,10 +298,14 @@ export function listQueues(root: string): QueueSummary[] {
       name: envelope.name,
       cwd: envelope.cwd,
       pid: envelope.pid,
+      ...(envelope.sessionFile === undefined ? {} : { sessionFile: envelope.sessionFile }),
       revision: envelope.log.revision,
       updatedAt: envelope.updatedAt,
       alive: ownerIsAlive(envelope),
-      pending: envelope.log.entries.filter((entry) => entry.state === "pending").length,
+      pending: pendingDeliverable(envelope.log.entries),
+      held: envelope.log.entries.filter(
+        (entry) => entry.state === "pending" && entry.kind === "note",
+      ).length,
       path: join(directory, name),
     });
   }
@@ -338,9 +350,11 @@ export function listArchive(root: string, kind: string): string[] {
     return [];
   }
   const prefix = `${kind}-`;
+  // What this lists must be what readArchive accepts, so the names come back as ids: a
+  // checkpoint listed by an agent and restored a turn later has to resolve.
   return names
     .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
-    .map((name) => name);
+    .map((name) => decodeURIComponent(name.slice(prefix.length, -5)));
 }
 
 function sweepDroppedFiles(root: string, ttlMs: number, now: number): QueueEntry[] {
@@ -418,6 +432,59 @@ function isAged(
   return born < cutoff;
 }
 
+/**
+ * One session's queue file, with the two moves a queue makes that outlive a
+ * process: load what was there, and take over the file of the session this one
+ * was resumed from. Resuming rewrites the session id, so the thread's history
+ * is the only handle back to owed prompts.
+ */
+export class QueueFile {
+  readonly root: string;
+  private current?: QueueIdentity;
+
+  constructor(root: string = defaultQueueDir()) {
+    this.root = ensureStore(root).root;
+  }
+
+  bind(identity: QueueIdentity): void {
+    this.current = identity;
+  }
+
+  /** The session this file belongs to, once a session has claimed it. */
+  identity(): QueueIdentity | undefined {
+    return this.current;
+  }
+
+  get sessionId(): string | undefined {
+    return this.current?.sessionId;
+  }
+
+  load(): QueueLog | undefined {
+    if (this.current === undefined) return undefined;
+    return readEnvelope(this.root, this.current.sessionId)?.log;
+  }
+
+  save(log: QueueLog, now = Date.now()): void {
+    if (this.current === undefined) return;
+    writeEnvelope(this.root, newEnvelope(this.current, log, now));
+  }
+
+  /** Adopt the queue of a dead session that shares this session's file. */
+  adopt(sessionFile: string, now = Date.now()): { log: QueueLog; adopted: number } {
+    for (const summary of listQueues(this.root)) {
+      if (summary.sessionFile !== sessionFile || summary.alive) continue;
+      const held = readEnvelope(this.root, summary.sessionId, now);
+      if (held === undefined) continue;
+      const adopted = held.log.entries.filter((entry) => entry.state === "pending").length;
+      writeArchive(this.root, "adopted", summary.sessionId, held);
+      rmSync(livePath(this.root, summary.sessionId), { force: true });
+      rmSync(`${livePath(this.root, summary.sessionId)}.bak`, { force: true });
+      return { log: held.log, adopted };
+    }
+    return { log: emptyQueueLog(), adopted: 0 };
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -435,6 +502,7 @@ function asEnvelope(value: unknown, now: number): QueueEnvelope | undefined {
     pid: value.pid,
     formatVersion: ENVELOPE_VERSION,
     updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : now,
+    ...(typeof value.sessionFile === "string" ? { sessionFile: value.sessionFile } : {}),
     log,
   };
 }
