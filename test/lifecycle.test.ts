@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { ResolvedVimEditorOptions, VimDiagnostics } from "../src/types.ts";
 
@@ -10,7 +13,11 @@ import {
   type VimConfigPlan,
   type VimRuntimeConfiguration,
 } from "../src/config.ts";
+import { DEFAULT_VIM_QUEUE } from "../src/config.ts";
 import { registerVimLifecycle } from "../src/lifecycle.ts";
+import { PromptQueue } from "../src/prompt-queue.ts";
+import { makeOpRecord } from "../src/queue-model.ts";
+import { claimOf, livePath, postOp, readEnvelope, readOps, QueueFile } from "../src/queue-store.ts";
 import { VimEditor } from "../src/vim-editor.ts";
 
 type HookName =
@@ -44,6 +51,13 @@ type FakeContext = {
   ui: FakeUi;
   shutdownCalls: number;
   shutdown: () => void;
+  /** Present only in tests that exercise session identity: the queue's durable wiring. */
+  sessionManager?: {
+    getSessionId: () => string;
+    getSessionName?: () => string | undefined;
+    getSessionFile?: () => string | undefined;
+    getCwd?: () => string;
+  };
 };
 
 type FakeEditor = {
@@ -1058,4 +1072,144 @@ test("keyboard toggling announces the queue mode switch", async () => {
   editor.handleInput("g");
   editor.handleInput("z");
   expect(ctx.ui.notifications.at(-1)).toEqual(["pi-vimmode queue mode disabled", "info"]);
+});
+
+/** Adoption refuses a live owner, so the test needs a pid that is provably not running. */
+function deadPid(): number {
+  for (let candidate = 4_000_000; candidate > 1; candidate -= 97_337) {
+    try {
+      process.kill(candidate, 0);
+    } catch {
+      return candidate;
+    }
+  }
+  throw new Error("no dead pid available");
+}
+
+test("piVimMode.queueDir moves the store and a resume adopts the thread it came from", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-queue-dir-"));
+  try {
+    // A session that is no longer running, with one prompt still waiting in its file.
+    const oldSessionFile = join(dir, "old-session.jsonl");
+    const oldFile = new QueueFile(dir);
+    oldFile.bind({
+      sessionId: "sess-old",
+      name: "old",
+      cwd: "/repo",
+      pid: deadPid(),
+      sessionFile: oldSessionFile,
+    });
+    const seed = new PromptQueue({
+      author: () => ({ session: "old", sessionId: "sess-old", cwd: "/repo", via: "tool" as const }),
+    });
+    seed.attach(oldFile);
+    seed.enqueue("finish the migration");
+
+    // pi resume hands the thread a brand-new id, so without adoption the prompt is simply gone.
+    const { hooks } = createLifecycleHarness([{ ...DEFAULT_VIM_OPTIONS, queueDir: dir }]);
+    const ctx = createContext("/repo");
+    ctx.sessionManager = {
+      getSessionId: () => "sess-new",
+      getSessionName: () => "new",
+      getSessionFile: () => join(dir, "new-session.jsonl"),
+      getCwd: () => "/repo",
+    };
+    hooks.get("session_start")?.({ previousSessionFile: oldSessionFile }, ctx);
+
+    expect(existsSync(livePath(dir, "sess-new"))).toBe(true);
+    expect((readEnvelope(dir, "sess-new")?.log.entries ?? []).map((entry) => entry.text)).toEqual([
+      "finish the migration",
+    ]);
+    // The adopted file is archived, not duplicated: the prompt has one home.
+    expect(existsSync(livePath(dir, "sess-old"))).toBe(false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("piVimMode.queue.peerTrust manual leaves a posted op in the inbox", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-queue-trust-"));
+  try {
+    const target = {
+      sessionId: "sess-target",
+      name: "target",
+      cwd: "/repo",
+      pid: process.pid,
+    };
+    postOp(
+      dir,
+      claimOf(target)[0] ?? target.sessionId,
+      makeOpRecord(
+        { session: "planner", sessionId: "sess-planner", cwd: "/repo" },
+        { sessionId: target.sessionId, revision: 0 },
+        {
+          kind: "add",
+          draft: {
+            text: "rebase before you continue",
+            author: { session: "planner", sessionId: "sess-planner", cwd: "/repo", via: "tool" },
+          },
+        },
+        Date.now(),
+      ),
+    );
+
+    const { hooks } = createLifecycleHarness([
+      {
+        ...DEFAULT_VIM_OPTIONS,
+        queueDir: dir,
+        queue: { ...DEFAULT_VIM_QUEUE, peerTrust: "manual" },
+      },
+    ]);
+    const ctx = createContext("/repo");
+    ctx.sessionManager = {
+      getSessionId: () => target.sessionId,
+      getSessionName: () => target.name,
+      getCwd: () => "/repo",
+    };
+    hooks.get("session_start")?.({}, ctx);
+
+    // Nothing was applied, and nothing was thrown away either: the op waits to be released.
+    expect(readEnvelope(dir, target.sessionId)?.log.entries ?? []).toEqual([]);
+    expect(readOps(dir, claimOf(target))).toHaveLength(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("piVimMode.queue.peerTrust auto applies a posted op at session start", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-vimmode-queue-auto-"));
+  try {
+    const target = { sessionId: "sess-auto", name: "auto", cwd: "/repo", pid: process.pid };
+    postOp(
+      dir,
+      claimOf(target)[0] ?? target.sessionId,
+      makeOpRecord(
+        { session: "planner", sessionId: "sess-planner", cwd: "/repo" },
+        { sessionId: target.sessionId, revision: 0 },
+        {
+          kind: "add",
+          draft: {
+            text: "rebase before you continue",
+            author: { session: "planner", sessionId: "sess-planner", cwd: "/repo", via: "tool" },
+          },
+        },
+        Date.now(),
+      ),
+    );
+
+    const { hooks } = createLifecycleHarness([{ ...DEFAULT_VIM_OPTIONS, queueDir: dir }]);
+    const ctx = createContext("/repo");
+    ctx.sessionManager = {
+      getSessionId: () => target.sessionId,
+      getSessionName: () => target.name,
+      getCwd: () => "/repo",
+    };
+    hooks.get("session_start")?.({}, ctx);
+
+    expect(
+      (readEnvelope(dir, target.sessionId)?.log.entries ?? []).map((entry) => entry.text),
+    ).toEqual(["rebase before you continue"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

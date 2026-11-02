@@ -20,6 +20,7 @@ import {
   dropOp,
   listArchive,
   listQueues,
+  sweepStore,
   newEnvelope,
   postOp,
   readArchive,
@@ -60,6 +61,8 @@ export interface QueueServiceDeps {
   knocker?: () => PeerKnocker | null;
   /** Auto lets peers both post and mutate; manual makes any delegated op refuse. */
   peerTrust: "auto" | "manual";
+  /** Hours before a dropped entry or an unread inbox op is archived; see `sweep`. */
+  ttlHours?: number;
   takeoverAfterMs?: number;
   /** Nudge this session's delivery loop; a no-op while the agent is busy. */
   flush?: () => void;
@@ -68,6 +71,8 @@ export interface QueueServiceDeps {
 }
 
 const DEFAULT_TAKEOVER_AFTER_MS = 60_000;
+/** One day: long enough to change your mind, short enough that the archive is the history. */
+const DEFAULT_TTL_HOURS = 24;
 
 type PeerAddress = { sessionId: string; name: string; claim: string };
 
@@ -108,11 +113,6 @@ export class QueueService {
 
   /**
    * Put this session's file on disk if it is not there yet. Without it the session is not
-   * merely empty to its peers, it is unaddressable — posting routes by what the store
-   * lists — so claiming happens before any op is addressed anywhere.
-   */
-  /**
-   * Put this session's file on disk if it is not there yet. Without it the session is not
    * merely empty to its peers, it is unaddressable — posting routes by what the store lists.
    * Lifecycle calls this where a session starts; the mutation paths call it too, because a
    * queue that has never been touched has nothing to route to.
@@ -123,6 +123,18 @@ export class QueueService {
     if (readEnvelope(this.deps.paths.root, identity.sessionId, this.deps.now()) === undefined) {
       writeEnvelope(this.deps.paths.root, newEnvelope(identity, this.log(), this.deps.now()));
     }
+  }
+
+  /**
+   * Age out what stopped being a decision: entries deleted before the window closed, and ops
+   * posted to a session that never woke up to read them. Both land in `archive/`, so
+   * `restore_checkpoint` and `list_checkpoints` still find them; `ttlHours` is the only knob.
+   */
+  sweep(now = this.deps.now()): { archivedEntries: number; archivedOps: number } {
+    const ttlMs = (this.deps.ttlHours ?? DEFAULT_TTL_HOURS) * 3_600_000;
+    const swept = sweepStore(this.deps.paths.root, ttlMs, now);
+    this.deps.queue.sweep(now - ttlMs);
+    return { archivedEntries: swept.archivedEntries.length, archivedOps: swept.archivedOps.length };
   }
 
   /** The pending view, in delivery order — what an index addresses. */

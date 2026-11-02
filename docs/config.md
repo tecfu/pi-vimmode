@@ -47,6 +47,16 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - JSON crosswalk: `piVimMode.preset`
 - Compatibility aliases: none
 
+#### `vim.queueDir`
+
+<a id="config-property-queueDir"></a>
+
+- Accepted shape: `string path`
+- Built-in default: `unset`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.queueDir`
+- Compatibility aliases: none
+
 #### `vim.startMode`
 
 <a id="config-property-startMode"></a>
@@ -261,6 +271,28 @@ Generated reference blocks below come from canonical source metadata. Regenerate
 - Built-in default: `true`
 - Assignment semantics: replaces value
 - JSON crosswalk: `piVimMode.promptTransforms.enabled`
+- Compatibility aliases: none
+
+### `vim.queue`
+
+#### `vim.queue.peerTrust`
+
+<a id="config-property-queue-peerTrust"></a>
+
+- Accepted shape: `"auto" or "manual"`
+- Built-in default: `"auto"`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.queue.peerTrust`
+- Compatibility aliases: none
+
+#### `vim.queue.ttlHours`
+
+<a id="config-property-queue-ttlHours"></a>
+
+- Accepted shape: `positive number`
+- Built-in default: `24`
+- Assignment semantics: replaces value
+- JSON crosswalk: `piVimMode.queue.ttlHours`
 - Compatibility aliases: none
 
 ### `vim.search`

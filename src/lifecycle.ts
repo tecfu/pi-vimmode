@@ -5,6 +5,7 @@ import type { ResolvedVimEditorOptions } from "./types.ts";
 import {
   createVimConfigPlan,
   DEFAULT_VIM_OPTIONS,
+  DEFAULT_VIM_QUEUE,
   loadVimOptions,
   type VimConfigLoadResult,
   type VimConfigPaths,
@@ -301,6 +302,15 @@ function disableEditor(state: EditorState, ctx: ExtensionContext): void {
 }
 
 /**
+ * Age out what this session dropped long ago. The clock is `queue.ttlHours`, and the sweep
+ * runs at session start: an entry nobody deleted within the window is a decision the session
+ * stopped making, and `restore_checkpoint` still finds it in `archive/`.
+ */
+function sweepQueue(state: EditorState, pi: ExtensionAPI): void {
+  queueServiceFor(state, pi).sweep();
+}
+
+/**
  * Who a queued prompt is attributed to. A peer reading the file needs an answer
  * that is not "the machine", so the session's own name is what is recorded.
  */
@@ -340,11 +350,31 @@ function queueServiceFor(state: EditorState, pi: ExtensionAPI): QueueService {
       state.peerKnocker ??= connectIntercom((pi as { events?: unknown }).events);
       return state.peerKnocker;
     },
-    peerTrust: "auto",
+    peerTrust: queueSettings(state).peerTrust,
+    ttlHours: queueSettings(state).ttlHours,
     flush: () => deliverQueueHead(state),
     captureBranch: () => state.queueBranch?.(),
   });
   return state.queueService;
+}
+
+/**
+ * The three queue settings, read from whatever the config resolved to right now. Absent
+ * means the documented default; a harness without loaded options behaves like the defaults.
+ */
+function queueSettings(state: EditorState): {
+  dir?: string;
+  peerTrust: "auto" | "manual";
+  ttlHours: number;
+} {
+  const options = state.config.configuration().plan.options;
+  return {
+    ...(typeof options.queueDir === "string" && options.queueDir.length > 0
+      ? { dir: options.queueDir }
+      : {}),
+    peerTrust: options.queue?.peerTrust ?? "auto",
+    ttlHours: options.queue?.ttlHours ?? DEFAULT_VIM_QUEUE.ttlHours,
+  };
 }
 
 function anonymousIdentity(): QueueIdentity {
@@ -407,18 +437,22 @@ function hydrateQueue(
     state.queue.attach(undefined);
     return;
   }
-  state.queueFile.bind(identity);
+  state.queueFile.bind(identity, queueSettings(state).dir);
   state.queue.attach(state.queueFile);
-  queueServiceFor(state, pi).claim();
+  // Read before claiming: claiming first would file an empty envelope, which reads back as
+  // "this session already has a queue", and a resumed session would never adopt the thread it
+  // came from.
   const held = state.queueFile.load();
-  if (held !== undefined) {
+  if (held === undefined) {
+    const previous = (event as { previousSessionFile?: unknown }).previousSessionFile;
+    if (typeof previous === "string" && previous.length > 0) {
+      const adopted = state.queueFile.adopt(previous);
+      if (adopted.adopted > 0) state.queue.restore(adopted.log);
+    }
+  } else {
     state.queue.restore(held);
-    return;
   }
-  const previous = (event as { previousSessionFile?: unknown }).previousSessionFile;
-  if (typeof previous !== "string" || previous.length === 0) return;
-  const adopted = state.queueFile.adopt(previous);
-  if (adopted.adopted > 0) state.queue.restore(adopted.log);
+  queueServiceFor(state, pi).claim();
 }
 
 /**
@@ -547,12 +581,17 @@ export function registerVimLifecycle(
   // unregisterTool, so it lives or dies with the extension, not with a session.
   registerQueueTool(pi, () => queueServiceFor(state, pi));
   pi.on("session_start", (event, ctx) => {
-    hydrateQueue(state, event, ctx, pi);
     observeSessionBranch(state, ctx);
+    // Settings first, and the queue binds after: the store location is itself a setting, so a
+    // file created before this load would sit in the default directory for the whole session.
+    // installEditorSoon refreshes synchronously in production; an async loader settles the same
+    // way on the scheduled reinstall.
+    installEditorSoon(state, ctx);
+    hydrateQueue(state, event, ctx, pi);
     // A session that was asleep while peers posted to it reads its mail the moment it wakes,
     // before anyone can type: an op nobody acted on is not allowed to look like an empty queue.
     queueServiceFor(state, pi).drainOps();
-    installEditorSoon(state, ctx);
+    sweepQueue(state, pi);
   });
   pi.on("resources_discover", (_event, ctx) => {
     observeSessionBranch(state, ctx);

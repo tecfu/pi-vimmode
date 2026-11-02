@@ -514,6 +514,24 @@ const PROPERTY_FACTS = {
     jsonPaths: ["piVimMode.promptTransforms.actions"],
     aliases: [],
   },
+  queueDir: {
+    acceptedShape: "string path",
+    assignment: "replaces value",
+    jsonPaths: ["piVimMode.queueDir"],
+    aliases: [],
+  },
+  "queue.peerTrust": {
+    acceptedShape: '"auto" or "manual"',
+    assignment: "replaces value",
+    jsonPaths: ["piVimMode.queue.peerTrust"],
+    aliases: [],
+  },
+  "queue.ttlHours": {
+    acceptedShape: "positive number",
+    assignment: "replaces value",
+    jsonPaths: ["piVimMode.queue.ttlHours"],
+    aliases: [],
+  },
   "promptTransforms.commands": {
     acceptedShape: "partial record of prompt-transform actions to string arrays",
     assignment: "replaces whole record; does not merge keys",

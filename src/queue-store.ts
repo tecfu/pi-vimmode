@@ -439,14 +439,31 @@ function isAged(
  * is the only handle back to owed prompts.
  */
 export class QueueFile {
-  readonly root: string;
+  private storeRoot: string;
   private current?: QueueIdentity;
 
   constructor(root: string = defaultQueueDir()) {
-    this.root = ensureStore(root).root;
+    this.storeRoot = ensureStore(root).root;
   }
 
-  bind(identity: QueueIdentity): void {
+  /** Where the files live. See `bind`: `piVimMode.queueDir` can move it at session start. */
+  get root(): string {
+    return this.storeRoot;
+  }
+
+  /**
+   * Claim the file for a session. `root` relocates the store first, which is how
+   * `piVimMode.queueDir` is honored; it is applied at session start only, because moving the
+   * store under a queue that is already open would split it across two directories.
+   */
+  bind(identity: QueueIdentity, root?: string): void {
+    if (root !== undefined) {
+      const next = ensureStore(root).root;
+      if (next !== this.storeRoot) {
+        this.storeRoot = next;
+        this.current = undefined;
+      }
+    }
     this.current = identity;
   }
 
@@ -461,24 +478,24 @@ export class QueueFile {
 
   load(): QueueLog | undefined {
     if (this.current === undefined) return undefined;
-    return readEnvelope(this.root, this.current.sessionId)?.log;
+    return readEnvelope(this.storeRoot, this.current.sessionId)?.log;
   }
 
   save(log: QueueLog, now = Date.now()): void {
     if (this.current === undefined) return;
-    writeEnvelope(this.root, newEnvelope(this.current, log, now));
+    writeEnvelope(this.storeRoot, newEnvelope(this.current, log, now));
   }
 
   /** Adopt the queue of a dead session that shares this session's file. */
   adopt(sessionFile: string, now = Date.now()): { log: QueueLog; adopted: number } {
-    for (const summary of listQueues(this.root)) {
+    for (const summary of listQueues(this.storeRoot)) {
       if (summary.sessionFile !== sessionFile || summary.alive) continue;
-      const held = readEnvelope(this.root, summary.sessionId, now);
+      const held = readEnvelope(this.storeRoot, summary.sessionId, now);
       if (held === undefined) continue;
       const adopted = held.log.entries.filter((entry) => entry.state === "pending").length;
-      writeArchive(this.root, "adopted", summary.sessionId, held);
-      rmSync(livePath(this.root, summary.sessionId), { force: true });
-      rmSync(`${livePath(this.root, summary.sessionId)}.bak`, { force: true });
+      writeArchive(this.storeRoot, "adopted", summary.sessionId, held);
+      rmSync(livePath(this.storeRoot, summary.sessionId), { force: true });
+      rmSync(`${livePath(this.storeRoot, summary.sessionId)}.bak`, { force: true });
       return { log: held.log, adopted };
     }
     return { log: emptyQueueLog(), adopted: 0 };

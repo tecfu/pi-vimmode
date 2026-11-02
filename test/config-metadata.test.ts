@@ -122,6 +122,12 @@ describe("canonical config metadata", () => {
       "search.clearOnCancel",
       "search.clearOnInsert",
       "search.maxHighlights",
+      "search.firstMatchKey",
+      "search.lastMatchKey",
+      "search.nextMatchKey",
+      "search.previousMatchKey",
+      "search.highlightColor",
+      "search.currentHighlightColor",
       "exCommand.autocomplete",
       "feedback.noop",
       "promptStructures.enabled",
@@ -129,6 +135,9 @@ describe("canonical config metadata", () => {
       "promptTransforms.enabled",
       "promptTransforms.actions",
       "promptTransforms.commands",
+      "queueDir",
+      "queue.peerTrust",
+      "queue.ttlHours",
     ]);
     expect(new Set(VIM_CONFIG_PROPERTY_METADATA.map(({ anchor }) => anchor)).size).toBe(
       VIM_CONFIG_PROPERTY_METADATA.length,

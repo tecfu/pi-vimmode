@@ -138,13 +138,14 @@ Protected keys can be overridden by listing them in `piVimMode.keymap.allowProte
 
 ## Top-level settings
 
-| Path                   | Default     | Accepted values                             | Effect                                                                                                                                                             |
-| ---------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                   |
-| `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                |
-| `piVimMode.leader`     | absent      | one printable character or `null`           | Replaces leading `<leader>` tokens after all settings layers resolve. `null` clears an inherited leader.                                                           |
-| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor. |
-| `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                     |
+| Path                   | Default     | Accepted values                             | Effect                                                                                                                                                                     |
+| ---------------------- | ----------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode`            | absent      | object                                      | Root config object. Missing object means all defaults. Non-object produces warning and defaults.                                                                           |
+| `piVimMode.preset`     | absent      | `"minimal"`, `"prompt-safe"`, `"vim-heavy"` | Applies a curated baseline before explicit fields in the same settings object. Invalid values warn and are ignored.                                                        |
+| `piVimMode.leader`     | absent      | one printable character or `null`           | Replaces leading `<leader>` tokens after all settings layers resolve. `null` clears an inherited leader.                                                                   |
+| `piVimMode.startMode`  | `"insert"`  | `"insert"`, `"normal"`                      | Mode used for new editor instances and Vim reset paths that explicitly reset transient modal state. Visual modes are invalid because they need a selection anchor.         |
+| `piVimMode.vimOptions` | unsupported | none                                        | Legacy alias object. Ignored with warning: use `piVimMode.ui`.                                                                                                             |
+| `piVimMode.queueDir`   | absent      | filesystem path                             | Where the shared queue store lives. Absent means `$PI_VIMMODE_QUEUE_DIR`, then `~/.pi/agent/queues`. Read when a session starts, so a change takes effect on the next one. |
 
 ### Presets
 
@@ -756,6 +757,31 @@ Example:
       "actions": { "reflow": false },
       "commands": { "quote": ["qte"], "fence": ["wrap"] }
     }
+  }
+}
+```
+
+## Prompt queue settings
+
+`piVimMode.queue` decides what the durable prompt queue does with anything another session
+puts on it, and how long it keeps what this session stopped acting on. The queue itself is the
+held list behind queue mode (see [features.md](features.md)); the agent reads and changes the
+same store through the `queue` tool.
+
+| Path                        | Default  | Accepted values      | Effect                                                                                                                                                                                                     |
+| --------------------------- | -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `piVimMode.queue.peerTrust` | `"auto"` | `"auto"`, `"manual"` | `"auto"` lets a peer post prompts and mutate this queue (the op is applied by _this_ session, and wakes it); `"manual"` accepts nothing from a peer, and its ops wait in the inbox until you release them. |
+| `piVimMode.queue.ttlHours`  | `24`     | positive number      | Hours after which a `dropped` entry or an op nobody read is moved to `archive/`. Swept at session start; `restore_checkpoint` still finds it.                                                              |
+
+Invalid values warn and leave the sibling settings intact.
+
+Example:
+
+```json
+{
+  "piVimMode": {
+    "queueDir": "~/.pi/agent/queues",
+    "queue": { "peerTrust": "manual", "ttlHours": 72 }
   }
 }
 ```

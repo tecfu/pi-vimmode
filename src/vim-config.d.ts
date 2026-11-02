@@ -247,6 +247,11 @@ export type VimKeymapApi = {
   ): void;
 };
 
+export type VimQueueOptions = {
+  peerTrust: "auto" | "manual";
+  ttlHours: number;
+};
+
 export type VimConfigApi = {
   preset: VimPreset;
   leader: string | null;
@@ -254,6 +259,8 @@ export type VimConfigApi = {
     mapleader: string | null;
   };
   startMode: VimStartupMode;
+  queueDir: string | null;
+  queue: VimQueueOptions;
   cursor: Record<VimMode, VimCursorStyle>;
   ui: {
     status: {

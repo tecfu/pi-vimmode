@@ -312,6 +312,20 @@ export type ResolvedVimEasymotion = VimEasymotionOptions;
 
 export type PartialVimEasymotionOptions = Partial<ResolvedVimEasymotion>;
 
+export type VimQueueOptions = {
+  /**
+   * Whether another session's ops on this queue are honoured without a human:
+   * "auto" posts and delivers, "manual" leaves them in the inbox to release.
+   */
+  peerTrust: "auto" | "manual";
+  /** Hours a dropped entry or an undelivered inbox op is kept before it is archived. */
+  ttlHours: number;
+};
+
+export type ResolvedVimQueue = VimQueueOptions;
+
+export type PartialVimQueueOptions = Partial<ResolvedVimQueue>;
+
 export type VimUiOptions = {
   status: {
     enabled: boolean;
@@ -424,6 +438,8 @@ export type ResolvedVimEditorOptions = {
   macros?: ResolvedVimMacros;
   marks?: ResolvedVimMarks;
   search?: ResolvedVimSearch;
+  queueDir?: string;
+  queue?: ResolvedVimQueue;
   easymotion?: ResolvedVimEasymotion;
   exCommand?: ResolvedVimExCommand;
   feedback?: VimFeedbackOptions;
